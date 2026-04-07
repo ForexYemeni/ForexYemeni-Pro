@@ -1,4 +1,5 @@
 import { db } from './db';
+import { hashPassword } from './auth';
 
 let migrationDone = false;
 
@@ -46,6 +47,33 @@ export async function ensureDatabase(): Promise<void> {
       EXCEPTION WHEN OTHERS THEN NULL;
       END $$;
     `);
+
+    // ═══ التأكد من وجود حساب الأدمن الافتراضي ═══
+    const existingAdmin = await db.admin.findFirst({
+      where: { email: 'admin@forexyemeni.com' },
+    });
+
+    if (!existingAdmin) {
+      const hashedPassword = await hashPassword('Admin@123');
+      await db.admin.create({
+        data: {
+          email: 'admin@forexyemeni.com',
+          password: hashedPassword,
+          name: 'المدير',
+          isDefaultPassword: true,
+        },
+      });
+      console.log('✅ Default admin created');
+    } else {
+      // التأكد من أن كلمة المرور مشفرة وأن isDefaultPassword صحيح
+      if (existingAdmin.password.length < 20) {
+        const hashedPassword = await hashPassword(existingAdmin.password || 'Admin@123');
+        await db.admin.update({
+          where: { id: existingAdmin.id },
+          data: { password: hashedPassword },
+        });
+      }
+    }
 
     migrationDone = true;
     console.log('✅ Database migration completed');
