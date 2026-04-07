@@ -532,11 +532,12 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 ))}
               </div>
 
-              {/* Dev OTP */}
+              {/* رمز OTP */}
               {devOTP && (
-                <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-center">
-                  <p className="text-[10px] text-blue-400">رمز التحقق (للتجربة):</p>
-                  <p className="text-lg font-bold text-blue-400 tracking-[0.3em]">{devOTP}</p>
+                <div className="rounded-xl border-2 border-trading-gold/40 bg-trading-gold/10 p-4 text-center">
+                  <p className="mb-1 text-xs font-bold text-trading-gold">🔑 رمز التحقق الخاص بك:</p>
+                  <p className="text-2xl font-black text-trading-gold tracking-[0.4em]" dir="ltr">{devOTP}</p>
+                  <p className="mt-1 text-[10px] text-trading-text-secondary">أدخل هذا الرمز في الخانات أدناه</p>
                 </div>
               )}
 

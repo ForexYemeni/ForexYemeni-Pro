@@ -44,18 +44,19 @@ export async function POST(request: NextRequest) {
       data: { otp, otpExpiry },
     });
 
-    const emailSent = await sendOTPEmail(normalizedEmail, otp);
+    // محاولة إرسال البريد
+    await sendOTPEmail(normalizedEmail, otp);
 
+    // دائماً إرجاع OTP
     return NextResponse.json({
       success: true,
       message: 'تم إرسال رمز التحقق',
-      emailSent,
-      ...(!emailSent ? { devOTP: otp } : {}),
+      devOTP: otp,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Send OTP error:', error);
     return NextResponse.json(
-      { error: 'حدث خطأ أثناء إرسال رمز التحقق', details: String(error) },
+      { error: 'حدث خطأ أثناء إرسال رمز التحقق: ' + (error.message || '') },
       { status: 500 }
     );
   }

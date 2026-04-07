@@ -5,7 +5,6 @@ import { ensureDatabase } from '@/lib/migrate';
 
 export async function POST(request: NextRequest) {
   try {
-    // ترحيل قاعدة البيانات أولاً
     await ensureDatabase();
 
     const { email, password, name } = await request.json();
@@ -67,19 +66,19 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const emailSent = await sendOTPEmail(normalizedEmail, otp);
+    // محاولة إرسال البريد
+    await sendOTPEmail(normalizedEmail, otp);
 
+    // دائماً إرجاع OTP في الاستجابة
     return NextResponse.json({
       success: true,
-      message: 'تم إنشاء الحساب. أدخل رمز التحقق المرسل إلى بريدك',
-      emailSent,
-      // عرض OTP دائماً إذا لم يتم إرسال البريد (حتى في الإنتاج)
-      ...(!emailSent ? { devOTP: otp } : {}),
+      message: 'تم إنشاء الحساب. أدخل رمز التحقق',
+      devOTP: otp,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Signup error:', error);
     return NextResponse.json(
-      { error: 'حدث خطأ أثناء إنشاء الحساب', details: String(error) },
+      { error: 'حدث خطأ أثناء إنشاء الحساب: ' + (error.message || '') },
       { status: 500 }
     );
   }
