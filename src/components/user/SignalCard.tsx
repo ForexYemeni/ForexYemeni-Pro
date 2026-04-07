@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Clock, Star, Shield, TrendingUp, TrendingDown, Target, Layers, Zap } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Clock, Star, Shield, TrendingUp, TrendingDown, Target, Layers, Zap, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Signal } from '@/lib/types';
 
 interface SignalCardProps {
@@ -27,6 +27,8 @@ function formatDate(dateStr: string): string {
 export default function SignalCard({ signal }: SignalCardProps) {
   const isBuy = signal.type === 'BUY';
   const isActive = signal.status === 'ACTIVE';
+  const isCompleted = signal.status !== 'ACTIVE';
+  const [expanded, setExpanded] = useState(false);
 
   const progress = useMemo(() => {
     if (!signal.targets || signal.targets.length === 0) return 0;
@@ -34,20 +36,102 @@ export default function SignalCard({ signal }: SignalCardProps) {
     return Math.round((hit / signal.targets.length) * 100);
   }, [signal.targets]);
 
+  const hitCount = useMemo(() => {
+    if (!signal.targets) return 0;
+    return signal.targets.filter((t) => t.status === 'HIT').length;
+  }, [signal.targets]);
+
   const sortedTargets = useMemo(() => {
     if (!signal.targets) return [];
     return [...signal.targets].sort((a, b) => a.order - b.order);
   }, [signal.targets]);
 
-  const statusConfig: Record<string, { label: string; color: string; bgColor: string }> = {
-    ACTIVE: { label: 'نشطة', color: 'text-trading-gold', bgColor: 'bg-trading-gold/15 border-trading-gold/30' },
-    TP_HIT: { label: 'وصلت الأهداف', color: 'text-trading-buy', bgColor: 'bg-trading-buy/15 border-trading-buy/30' },
-    SL_HIT: { label: 'وقف الخسارة', color: 'text-trading-sell', bgColor: 'bg-trading-sell/15 border-trading-sell/30' },
-    CLOSED: { label: 'مغلقة', color: 'text-trading-text-secondary', bgColor: 'bg-gray-500/15 border-gray-500/30' },
+  const statusConfig: Record<string, { label: string; color: string; bgColor: string; icon: string }> = {
+    ACTIVE: { label: 'نشطة', color: 'text-trading-gold', bgColor: 'bg-trading-gold/15 border-trading-gold/30', icon: '🔥' },
+    TP_HIT: { label: 'ناجحة', color: 'text-trading-buy', bgColor: 'bg-trading-buy/15 border-trading-buy/30', icon: '✅' },
+    SL_HIT: { label: 'خاسرة', color: 'text-trading-sell', bgColor: 'bg-trading-sell/15 border-trading-sell/30', icon: '❌' },
+    CLOSED: { label: 'مغلقة', color: 'text-trading-text-secondary', bgColor: 'bg-gray-500/15 border-gray-500/30', icon: '🔒' },
   };
 
   const statusInfo = statusConfig[signal.status] || statusConfig.ACTIVE;
 
+  // ════════════════════════════════════════════
+  // بطاقة صغيرة للصفقات المكتملة (ربح/خسارة/مغلقة)
+  // ════════════════════════════════════════════
+  if (isCompleted && !expanded) {
+    return (
+      <button
+        onClick={() => setExpanded(true)}
+        className="signal-card-hover w-full overflow-hidden rounded-xl border border-trading-border bg-trading-card transition-all hover:border-trading-gold/30"
+      >
+        <div className="flex items-center justify-between p-3">
+          {/* الجانب الأيمن: نوع الصفقة + الزوج */}
+          <div className="flex items-center gap-2.5">
+            <div
+              className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold ${
+                isBuy
+                  ? 'bg-trading-buy/15 text-trading-buy'
+                  : 'bg-trading-sell/15 text-trading-sell'
+              }`}
+            >
+              {isBuy ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+            </div>
+            <div className="text-right">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-trading-text">{signal.pair}</h3>
+                <span className="text-[10px] text-trading-text-secondary">{signal.timeframe}</span>
+              </div>
+              <p className="text-[10px] text-trading-text-secondary">{formatDate(signal.createdAt)}</p>
+            </div>
+          </div>
+
+          {/* الجانب الأيسر: النتيجة + الأهداف + سهم */}
+          <div className="flex items-center gap-2.5">
+            {/* نجوم */}
+            <div className="hidden gap-0.5 sm:flex">
+              {Array.from({ length: signal.stars }).map((_, i) => (
+                <Star key={i} className="h-2.5 w-2.5 fill-trading-gold text-trading-gold" />
+              ))}
+            </div>
+
+            {/* حالة الأهداف */}
+            {sortedTargets.length > 0 && (
+              <div className="flex items-center gap-1">
+                <span className={`text-[10px] font-bold ${signal.status === 'TP_HIT' ? 'text-trading-buy' : 'text-trading-text-secondary'}`}>
+                  {hitCount}/{sortedTargets.length}
+                </span>
+                <Target className={`h-3 w-3 ${signal.status === 'TP_HIT' ? 'text-trading-buy' : 'text-trading-text-secondary'}`} />
+              </div>
+            )}
+
+            {/* شارة النتيجة */}
+            <span className={`rounded-md border px-2 py-1 text-[10px] font-bold ${statusInfo.bgColor} ${statusInfo.color}`}>
+              {statusInfo.icon} {statusInfo.label}
+            </span>
+
+            {/* سهم الفتح */}
+            <ChevronDown className="h-4 w-4 text-trading-text-secondary" />
+          </div>
+        </div>
+
+        {/* شريط تقدم مختصر */}
+        {sortedTargets.length > 0 && (
+          <div className="h-0.5 bg-trading-bg">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                signal.status === 'TP_HIT' ? 'bg-trading-buy' : signal.status === 'SL_HIT' ? 'bg-trading-sell' : 'bg-trading-text-secondary'
+              }`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+        )}
+      </button>
+    );
+  }
+
+  // ════════════════════════════════════════════
+  // البطاقة الكاملة (نشطة أو مفتوحة)
+  // ════════════════════════════════════════════
   return (
     <div
       className={`signal-card-hover overflow-hidden rounded-xl border ${
@@ -88,9 +172,20 @@ export default function SignalCard({ signal }: SignalCardProps) {
               />
             ))}
           </div>
-          <span className={`rounded-md border px-2 py-0.5 text-[10px] font-medium ${statusInfo.bgColor} ${statusInfo.color}`}>
-            {statusInfo.label}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`rounded-md border px-2 py-0.5 text-[10px] font-medium ${statusInfo.bgColor} ${statusInfo.color}`}>
+              {statusInfo.icon} {statusInfo.label}
+            </span>
+            {isCompleted && (
+              <button
+                onClick={() => setExpanded(false)}
+                className="flex items-center gap-1 rounded-md border border-trading-border px-2 py-0.5 text-[10px] text-trading-text-secondary transition-colors hover:bg-trading-card-alt"
+              >
+                <ChevronUp className="h-3 w-3" />
+                طيّ
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -212,13 +307,11 @@ export default function SignalCard({ signal }: SignalCardProps) {
                         : 'border-trading-border/50 bg-trading-bg/40'
                     }`}
                   >
-                    {/* Hit indicator glow */}
                     {isHit && (
                       <div className="absolute inset-0 bg-gradient-to-br from-trading-buy/5 to-transparent" />
                     )}
 
                     <div className="relative flex items-center justify-between">
-                      {/* Target Number */}
                       <div className="flex items-center gap-1.5">
                         <span
                           className={`flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold ${
@@ -231,23 +324,19 @@ export default function SignalCard({ signal }: SignalCardProps) {
                         </span>
                       </div>
 
-                      {/* Hit Check */}
                       {isHit && (
                         <span className="text-trading-buy">✓</span>
                       )}
                     </div>
 
-                    {/* Price */}
                     <p className={`mt-1.5 text-[13px] font-bold ${isHit ? 'text-trading-buy' : 'text-trading-text'}`}>
                       {formatPrice(target.price, signal.pair)}
                     </p>
 
-                    {/* Percentage */}
                     <p className="mt-0.5 text-[10px] text-trading-text-secondary">
                       {target.percentage}%
                     </p>
 
-                    {/* Status Label */}
                     <div className="mt-1.5">
                       <span
                         className={`inline-block w-full rounded-md px-1.5 py-0.5 text-center text-[9px] font-medium ${
