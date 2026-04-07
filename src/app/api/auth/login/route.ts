@@ -5,7 +5,6 @@ import { ensureDatabase } from '@/lib/migrate';
 
 export async function POST(request: NextRequest) {
   try {
-    // ترحيل قاعدة البيانات أولاً
     await ensureDatabase();
 
     const { email, password } = await request.json();
@@ -19,6 +18,57 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.toLowerCase().trim();
 
+    // ═══════════════════════════════════════════════════
+    // 1. البحث في جدول Admin أولاً
+    // ═══════════════════════════════════════════════════
+    try {
+      const admin = await db.admin.findFirst({
+        where: { email: normalizedEmail },
+      });
+
+      if (admin) {
+        let isPasswordValid = false;
+
+        // محاولة bcrypt
+        try {
+          isPasswordValid = await verifyPassword(password, admin.password);
+        } catch {
+          isPasswordValid = (password === admin.password);
+        }
+
+        // كلمة المرور الافتراضية تعمل دائماً
+        if (!isPasswordValid && password === 'Admin@123') {
+          isPasswordValid = true;
+        }
+
+        if (isPasswordValid) {
+          // تشفير كلمة المرور إذا كانت نص عادي
+          if (admin.password && admin.password.length < 20) {
+            const { hashPassword } = await import('@/lib/auth');
+            const hashed = await hashPassword(admin.password);
+            await db.admin.update({
+              where: { id: admin.id },
+              data: { password: hashed },
+            });
+          }
+
+          return NextResponse.json({
+            success: true,
+            role: 'admin',
+            admin: {
+              id: admin.id,
+              email: admin.email,
+              name: admin.name,
+              isDefaultPassword: admin.isDefaultPassword ?? true,
+            },
+          });
+        }
+      }
+    } catch {}
+
+    // ═══════════════════════════════════════════════════
+    // 2. البحث في جدول User
+    // ═══════════════════════════════════════════════════
     const user = await db.user.findUnique({
       where: { email: normalizedEmail },
     });
@@ -30,8 +80,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // التحقق من كلمة المرور
-    const isPasswordValid = await verifyPassword(password, user.password);
+    let isPasswordValid = false;
+    try {
+      isPasswordValid = await verifyPassword(password, user.password);
+    } catch {
+      isPasswordValid = (password === user.password);
+    }
 
     if (!isPasswordValid) {
       return NextResponse.json(
@@ -40,7 +94,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // التحقق من حالة الحساب
     if (user.isVerified === false) {
       return NextResponse.json(
         { error: 'هذا الحساب لم يتم التحقق بعد', code: 'NOT_VERIFIED' },
@@ -48,7 +101,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // إنشاء جلسة
     const sessionToken = generateSessionToken();
 
     await db.user.update({
@@ -58,6 +110,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      role: 'user',
       token: sessionToken,
       user: {
         id: user.id,
@@ -66,10 +119,10 @@ export async function POST(request: NextRequest) {
         role: user.role,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Login error:', error);
     return NextResponse.json(
-      { error: 'حدث خطأ أثناء تسجيل الدخول', details: String(error) },
+      { error: 'حدث خطأ أثناء تسجيل الدخول', details: String(error.message || '') },
       { status: 500 }
     );
   }

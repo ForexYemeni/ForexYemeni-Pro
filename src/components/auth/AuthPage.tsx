@@ -1,15 +1,16 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { TrendingUp, Mail, User, ArrowLeft, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
+import { TrendingUp, Mail, User, ArrowLeft, ShieldCheck, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 
 interface AuthPageProps {
   onAuthSuccess: (user: { id: string; email: string; name: string; role: string; token: string }) => void;
+  onAdminLogin: (admin: { id: string; email: string; name: string; isDefaultPassword: boolean }) => void;
 }
 
 type AuthMode = 'choice' | 'login' | 'register';
 
-export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
+export default function AuthPage({ onAuthSuccess, onAdminLogin }: AuthPageProps) {
   const [mode, setMode] = useState<AuthMode>('choice');
   const [step, setStep] = useState<'form' | 'otp'>('form');
   const [email, setEmail] = useState('');
@@ -22,10 +23,8 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
   const [success, setSuccess] = useState('');
   const [countdown, setCountdown] = useState(0);
   const [devOTP, setDevOTP] = useState('');
-  const [needsVerification, setNeedsVerification] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Reset state when switching modes
   useEffect(() => {
     setError('');
     setSuccess('');
@@ -34,23 +33,23 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
     setEmail('');
     setShowPassword(false);
     setDevOTP('');
-    setNeedsVerification(false);
   }, [mode]);
 
-  // Countdown timer
   useEffect(() => {
     if (countdown <= 0) return;
     const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
     return () => clearTimeout(timer);
   }, [countdown]);
 
-  // Focus first OTP input
   useEffect(() => {
     if (step === 'otp' && inputRefs.current[0]) {
       inputRefs.current[0].focus();
     }
   }, [step]);
 
+  // ══════════════════════════════════════════════════════
+  // تسجيل الدخول (يدعم المستخدمين والإدارة)
+  // ══════════════════════════════════════════════════════
   const handleLogin = useCallback(async () => {
     if (!email.includes('@') || password.length < 1) return;
 
@@ -69,25 +68,31 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
 
       if (!res.ok) {
         if (data.code === 'NOT_VERIFIED') {
-          setNeedsVerification(true);
           setError('هذا الحساب لم يتم التحقق بعد. أدخل رمز التحقق');
           setStep('otp');
-          // Request OTP resend
           const resendRes = await fetch('/api/auth/send-otp', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email }),
           });
           const resendData = await resendRes.json();
-          if (resendData.devOTP) setDevOTP(resendData.devOTP);
+          const otpCode = resendData.devOTP || resendData.otp || '';
+          setDevOTP(otpCode);
+          if (otpCode) setOtp(otpCode.split(''));
           setCountdown(60);
-          setOtp(['', '', '', '', '', '']);
         } else {
           setError(data.error || 'حدث خطأ');
         }
         return;
       }
 
+      // إذا كان مدير → إما يفرض تغيير أو يدخل لوحة التحكم
+      if (data.role === 'admin') {
+        onAdminLogin(data.admin);
+        return;
+      }
+
+      // مستخدم عادي
       onAuthSuccess({
         id: data.user.id,
         email: data.user.email,
@@ -100,8 +105,11 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [email, password, onAuthSuccess]);
+  }, [email, password, onAuthSuccess, onAdminLogin]);
 
+  // ══════════════════════════════════════════════════════
+  // إنشاء حساب جديد
+  // ══════════════════════════════════════════════════════
   const handleSignup = useCallback(async () => {
     if (!email.includes('@') || password.length < 6 || name.trim().length < 2) return;
 
@@ -123,13 +131,11 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
         return;
       }
 
-      // عرض الرمز دائماً وتعبئته تلقائياً
       const otpCode = data.devOTP || data.otp || '';
       setDevOTP(otpCode);
       setSuccess('تم إنشاء الحساب بنجاح');
       setStep('otp');
       setCountdown(60);
-      // تعبئة خانات OTP تلقائياً بالرمز
       if (otpCode) {
         setOtp(otpCode.split(''));
       } else {
@@ -142,6 +148,9 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
     }
   }, [email, password, name]);
 
+  // ══════════════════════════════════════════════════════
+  // التحقق من OTP
+  // ══════════════════════════════════════════════════════
   const handleVerifyOTP = useCallback(async () => {
     const otpCode = otp.join('');
     if (otpCode.length !== 6) {
@@ -227,10 +236,24 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
       inputRefs.current[index + 1]?.focus();
     }
 
-    // Auto-verify on complete
     if (newOtp.every(d => d !== '') && newOtp.join('').length === 6) {
       setTimeout(() => {
-        handleVerifyOTP();
+        const verify = async () => {
+          setLoading(true);
+          setError('');
+          try {
+            const res = await fetch('/api/auth/verify-otp', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, otp: newOtp.join('') }),
+            });
+            const data = await res.json();
+            if (!res.ok) { setError(data.error); return; }
+            onAuthSuccess({ id: data.user.id, email: data.user.email, name: data.user.name, role: data.user.role, token: data.token });
+          } catch { setError('خطأ في الاتصال'); }
+          finally { setLoading(false); }
+        };
+        verify();
       }, 300);
     }
   };
@@ -241,37 +264,11 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
     }
   };
 
-  const handlePaste = (e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
-    if (pasted.length === 6) {
-      const newOtp = pasted.split('');
-      setOtp(newOtp);
-      inputRefs.current[5]?.focus();
-      setTimeout(async () => {
-        setLoading(true);
-        setError('');
-        try {
-          const res = await fetch('/api/auth/verify-otp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, otp: pasted }),
-          });
-          const data = await res.json();
-          if (!res.ok) { setError(data.error); return; }
-          onAuthSuccess({ id: data.user.id, email: data.user.email, name: data.user.name, role: data.user.role, token: data.token });
-        } catch { setError('خطأ في الاتصال'); }
-        finally { setLoading(false); }
-      }, 300);
-    }
-  };
-
   const handleBack = () => {
     if (step === 'otp') {
       setStep('form');
       setError('');
       setSuccess('');
-      setNeedsVerification(false);
     } else {
       setMode('choice');
       setStep('form');
@@ -280,7 +277,6 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
       setPassword('');
       setName('');
       setEmail('');
-      setNeedsVerification(false);
     }
   };
 
@@ -307,7 +303,6 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
 
         {/* Auth Card */}
         <div className="rounded-2xl border border-trading-border bg-trading-card p-6">
-          {/* Back button */}
           {mode !== 'choice' && (
             <button
               onClick={handleBack}
@@ -318,13 +313,11 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
             </button>
           )}
 
-          {/* ═══ Choice Screen ═══ */}
+          {/* ═══ اختيار ═══ */}
           {mode === 'choice' && (
             <div className="space-y-4">
               <h2 className="text-center text-lg font-bold text-trading-text">مرحباً بك</h2>
-              <p className="text-center text-sm text-trading-text-secondary">
-                سجّل دخولك لمتابعة الإشارات
-              </p>
+              <p className="text-center text-sm text-trading-text-secondary">سجّل دخولك لمتابعة الإشارات</p>
 
               <button
                 onClick={() => setMode('login')}
@@ -354,16 +347,14 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
             </div>
           )}
 
-          {/* ═══ Login Form ═══ */}
+          {/* ═══ تسجيل دخول ═══ */}
           {mode === 'login' && step === 'form' && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-trading-text">تسجيل الدخول</h2>
+              <p className="text-xs text-trading-text-secondary">المستخدمون والإدارة يدخلون من هنا</p>
 
-              {/* Email */}
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">
-                  البريد الإلكتروني
-                </label>
+                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">البريد الإلكتروني</label>
                 <div className="relative">
                   <Mail className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
                   <input
@@ -378,11 +369,8 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 </div>
               </div>
 
-              {/* Password */}
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">
-                  كلمة المرور
-                </label>
+                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">كلمة المرور</label>
                 <div className="relative">
                   <Lock className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
                   <input
@@ -404,7 +392,6 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 </div>
               </div>
 
-              {/* Login Button */}
               <button
                 onClick={handleLogin}
                 disabled={isLoginDisabled}
@@ -425,16 +412,13 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
             </div>
           )}
 
-          {/* ═══ Register Form ═══ */}
+          {/* ═══ إنشاء حساب ═══ */}
           {mode === 'register' && step === 'form' && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-trading-text">إنشاء حساب جديد</h2>
 
-              {/* Name */}
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">
-                  الاسم الكامل
-                </label>
+                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">الاسم الكامل</label>
                 <div className="relative">
                   <User className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
                   <input
@@ -448,11 +432,8 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 </div>
               </div>
 
-              {/* Email */}
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">
-                  البريد الإلكتروني
-                </label>
+                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">البريد الإلكتروني</label>
                 <div className="relative">
                   <Mail className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
                   <input
@@ -466,11 +447,8 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 </div>
               </div>
 
-              {/* Password */}
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">
-                  كلمة المرور
-                </label>
+                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">كلمة المرور</label>
                 <div className="relative">
                   <Lock className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
                   <input
@@ -495,7 +473,6 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 )}
               </div>
 
-              {/* Signup Button */}
               <button
                 onClick={handleSignup}
                 disabled={isSignupDisabled}
@@ -516,17 +493,14 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
             </div>
           )}
 
-          {/* ═══ OTP Step ═══ */}
+          {/* ═══ OTP ═══ */}
           {step === 'otp' && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-trading-text">رمز التحقق</h2>
-              <p className="text-sm text-trading-text-secondary">
-                أدخل الرمز المكون من 6 أرقام المرسل إلى
-              </p>
+              <p className="text-sm text-trading-text-secondary">أدخل الرمز المكون من 6 أرقام المرسل إلى</p>
               <p className="text-sm font-medium text-trading-gold" dir="ltr">{email}</p>
 
-              {/* OTP Inputs */}
-              <div className="flex justify-center gap-2.5" onPaste={handlePaste} dir="ltr">
+              <div className="flex justify-center gap-2.5" dir="ltr">
                 {otp.map((digit, index) => (
                   <input
                     key={index}
@@ -542,7 +516,6 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 ))}
               </div>
 
-              {/* رمز OTP */}
               {devOTP && (
                 <div className="rounded-xl border-2 border-trading-gold/40 bg-trading-gold/10 p-4 text-center">
                   <p className="mb-1 text-xs font-bold text-trading-gold">🔑 رمز التحقق الخاص بك:</p>
@@ -551,7 +524,6 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 </div>
               )}
 
-              {/* Verify Button */}
               <button
                 onClick={handleVerifyOTP}
                 disabled={loading || otp.join('').length !== 6}
@@ -570,7 +542,6 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 )}
               </button>
 
-              {/* Resend */}
               <div className="text-center">
                 {countdown > 0 ? (
                   <p className="text-xs text-trading-text-secondary">
@@ -589,7 +560,6 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
             </div>
           )}
 
-          {/* Error/Success Messages */}
           {error && (
             <div className="mt-4 rounded-lg border border-trading-sell/20 bg-trading-sell/5 p-3 text-center text-xs text-trading-sell">
               {error}
@@ -602,7 +572,6 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
           )}
         </div>
 
-        {/* Footer */}
         <p className="mt-6 text-center text-[10px] text-trading-text-secondary">
           ForexYemeni Pro &copy; {new Date().getFullYear()} - جميع الحقوق محفوظة
         </p>

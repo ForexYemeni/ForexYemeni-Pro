@@ -32,7 +32,6 @@ export default function Navigation({ currentView, onViewChange, isAdmin, onLogou
             </button>
 
             <div className="flex items-center gap-2">
-              {/* اسم المستخدم */}
               {authUser && !isAdmin && (
                 <div className="hidden items-center gap-2 rounded-lg border border-trading-border px-2.5 py-1.5 sm:flex">
                   <div className="flex h-6 w-6 items-center justify-center rounded-full bg-trading-gold/15">
@@ -42,7 +41,6 @@ export default function Navigation({ currentView, onViewChange, isAdmin, onLogou
                 </div>
               )}
 
-              {/* زر تسجيل خروج المستخدم */}
               {authUser && !isAdmin && onUserLogout && (
                 <button
                   onClick={onUserLogout}
@@ -62,15 +60,6 @@ export default function Navigation({ currentView, onViewChange, isAdmin, onLogou
                 </button>
               )}
 
-              {!isAdmin && currentView === 'user' && (
-                <button
-                  onClick={() => onViewChange('admin-login')}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-trading-border transition-colors hover:bg-trading-card-alt"
-                >
-                  <Settings className="h-4 w-4 text-trading-text-secondary" />
-                </button>
-              )}
-
               {isAdmin && (
                 <button
                   onClick={() => onViewChange(currentView === 'admin-dashboard' ? 'user' : 'admin-dashboard')}
@@ -87,7 +76,6 @@ export default function Navigation({ currentView, onViewChange, isAdmin, onLogou
         </div>
       </header>
 
-      {/* Bottom Navigation (Mobile) */}
       {currentView === 'user' && (
         <nav className="glass-effect fixed bottom-0 left-0 right-0 z-50 border-t border-trading-border sm:hidden">
           <div className="flex items-center justify-around py-2" style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}>
