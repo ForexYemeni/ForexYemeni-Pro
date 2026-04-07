@@ -3,7 +3,76 @@ generator client {
 }
 
 datasource db {
-  provider  = "sqlite"
-  url       = env("TURSO_DATABASE_URL") 
-  directUrl = env("TURSO_DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Signal {
+  id            String   @id @default(cuid())
+  type          String
+  pair          String
+  timeframe     String
+  entryPrice    Float
+  stopLoss      Float
+  stopLossType  String   @default("ATR")
+  riskPercent   Float    @default(5.0)
+  riskAmount    Float    @default(0)
+  lotSize       Float    @default(0)
+  lotType       String   @default("")
+  balance       Float    @default(100)
+  stars         Int      @default(1)
+  mtfTrend      String   @default("BULLISH")
+  smcStructure  String   @default("BULLISH")
+  status        String   @default("ACTIVE")
+  tpReached     Int      @default(0)
+  alertText     String   @default("")
+  alertStyle    String   @default("normal")
+  tpMode        String   @default("ATR")
+  planName      String   @default("ForexYemeni_Gold")
+  contractSize  Float    @default(100)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  targets SignalTarget[]
+}
+
+model SignalTarget {
+  id        String   @id @default(cuid())
+  signalId  String
+  order     Int
+  price     Float
+  status    String   @default("PENDING")
+  percentage Float   @default(0)
+  
+  signal    Signal   @relation(fields: [signalId], references: [id], onDelete: Cascade)
+  
+  @@index([signalId])
+}
+
+model LicenseKey {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  plan      String
+  isActive  Boolean  @default(true)
+  usedBy    String?
+  createdAt DateTime @default(now())
+}
+
+model Statistic {
+  id          String   @id @default(cuid())
+  totalTrades Int      @default(0)
+  winTrades   Int      @default(0)
+  lossTrades  Int      @default(0)
+  period      String   @default("ALL")
+  updatedAt   DateTime @updatedAt
 }

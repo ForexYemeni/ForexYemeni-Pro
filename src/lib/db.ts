@@ -1,26 +1,19 @@
 import { PrismaClient } from '@prisma/client'
-import { PrismaLibSQL } from '@prisma/adapter-libsql'
-import { createClient } from '@libsql/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
 function createPrismaClient() {
-  // إذا كان هناك رابط Turso، استخدمه
-  const tursoUrl = process.env.TURSO_DATABASE_URL
-  const tursoAuthToken = process.env.TURSO_AUTH_TOKEN
+  const databaseUrl = process.env.DATABASE_URL
 
-  if (tursoUrl) {
-    const libsql = createClient({
-      url: tursoUrl,
-      authToken: tursoAuthToken,
-    })
-    const adapter = new PrismaLibSQL(libsql)
+  if (databaseUrl && databaseUrl.startsWith('postgres')) {
+    const adapter = new PrismaPg({ connectionString: databaseUrl })
     return new PrismaClient({ adapter })
   }
 
-  // إذا لم يكن هناك Turso، استخدم SQLite عادي (للتطوير المحلي)
+  // Fallback: SQLite محلي للتطوير
   return new PrismaClient()
 }
 
