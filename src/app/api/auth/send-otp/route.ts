@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { generateOTP, sendOTPEmail } from '@/lib/auth';
+import { ensureDatabase } from '@/lib/migrate';
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureDatabase();
+
     const { email } = await request.json();
 
     if (!email || !email.includes('@')) {
@@ -15,7 +18,6 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Find user - only allow resending OTP for unverified users
     const user = await db.user.findUnique({
       where: { email: normalizedEmail },
     });
@@ -34,16 +36,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate new OTP
     const otp = generateOTP();
-    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
     await db.user.update({
       where: { email: normalizedEmail },
       data: { otp, otpExpiry },
     });
 
-    // Send OTP email
     const emailSent = await sendOTPEmail(normalizedEmail, otp);
 
     return NextResponse.json({
@@ -52,9 +52,10 @@ export async function POST(request: NextRequest) {
       emailSent,
       ...(process.env.NODE_ENV !== 'production' && !emailSent ? { devOTP: otp } : {}),
     });
-  } catch {
+  } catch (error) {
+    console.error('Send OTP error:', error);
     return NextResponse.json(
-      { error: 'حدث خطأ أثناء إرسال رمز التحقق' },
+      { error: 'حدث خطأ أثناء إرسال رمز التحقق', details: String(error) },
       { status: 500 }
     );
   }

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyPassword, hashPassword } from '@/lib/auth';
+import { ensureDatabase } from '@/lib/migrate';
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureDatabase();
+
     const { adminId, currentPassword, newPassword } = await request.json();
 
     if (!adminId || !currentPassword || !newPassword) {
@@ -13,7 +16,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate new password length
     if (newPassword.length < 6) {
       return NextResponse.json(
         { error: 'كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل' },
@@ -32,7 +34,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify current password
     const isCurrentValid = await verifyPassword(currentPassword, admin.password);
 
     if (!isCurrentValid) {
@@ -42,7 +43,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash new password and update
     const hashedNewPassword = await hashPassword(newPassword);
 
     await db.admin.update({
@@ -57,9 +57,10 @@ export async function POST(request: NextRequest) {
       success: true,
       message: 'تم تغيير كلمة المرور بنجاح',
     });
-  } catch {
+  } catch (error) {
+    console.error('Change password error:', error);
     return NextResponse.json(
-      { error: 'حدث خطأ أثناء تغيير كلمة المرور' },
+      { error: 'حدث خطأ أثناء تغيير كلمة المرور', details: String(error) },
       { status: 500 }
     );
   }

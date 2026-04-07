@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyPassword } from '@/lib/auth';
+import { ensureDatabase } from '@/lib/migrate';
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureDatabase();
+
     const { email, password } = await request.json();
 
     if (!email || !password) {
@@ -26,7 +29,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify password with bcrypt
     const isPasswordValid = await verifyPassword(password, admin.password);
 
     if (!isPasswordValid) {
@@ -45,9 +47,10 @@ export async function POST(request: NextRequest) {
         isDefaultPassword: admin.isDefaultPassword,
       },
     });
-  } catch {
+  } catch (error) {
+    console.error('Admin login error:', error);
     return NextResponse.json(
-      { error: 'حدث خطأ أثناء تسجيل الدخول' },
+      { error: 'حدث خطأ أثناء تسجيل الدخول', details: String(error) },
       { status: 500 }
     );
   }

@@ -1,78 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 🔄 ترحيل تلقائي لقاعدة البيانات - يحدث الهيكل عند كل نشر جديد
-// ═══════════════════════════════════════════════════════════════════════════
-async function migrateDatabase() {
-  const migrations: string[] = [];
-
-  try {
-    // ═══ جلب أسماء الأعمدة الموجودة ═══
-    const adminColumns = await db.$queryRawUnsafe(
-      `SELECT column_name FROM information_schema.columns WHERE table_name = 'Admin'`
-    ) as { column_name: string }[];
-
-    const userColumns = await db.$queryRawUnsafe(
-      `SELECT column_name FROM information_schema.columns WHERE table_name = 'User'`
-    ) as { column_name: string }[];
-
-    const adminColNames = adminColumns.map(c => c.column_name);
-    const userColNames = userColumns.map(c => c.column_name);
-
-    // ═══ ترحيل جدول Admin ═══
-    // تغيير username إلى email
-    if (adminColNames.includes('username') && !adminColNames.includes('email')) {
-      await db.$executeRawUnsafe(
-        `ALTER TABLE "Admin" RENAME COLUMN "username" TO "email"`
-      );
-      migrations.push('Admin: username → email');
-    }
-
-    // إضافة isDefaultPassword
-    if (!adminColNames.includes('isDefaultPassword')) {
-      await db.$executeRawUnsafe(
-        `ALTER TABLE "Admin" ADD COLUMN "isDefaultPassword" BOOLEAN NOT NULL DEFAULT true`
-      );
-      migrations.push('Admin: +isDefaultPassword');
-    }
-
-    // ═══ ترحيل جدول User ═══
-    // إضافة password
-    if (!userColNames.includes('password')) {
-      await db.$executeRawUnsafe(
-        `ALTER TABLE "User" ADD COLUMN "password" TEXT NOT NULL DEFAULT ''`
-      );
-      migrations.push('User: +password');
-    }
-
-    // إضافة isVerified
-    if (!userColNames.includes('isVerified')) {
-      await db.$executeRawUnsafe(
-        `ALTER TABLE "User" ADD COLUMN "isVerified" BOOLEAN NOT NULL DEFAULT true`
-      );
-      migrations.push('User: +isVerified (existing users set as verified)');
-    }
-
-  } catch (error) {
-    // إذا الجدول غير موجود أصلاً، سينشئه Prisma تلقائياً
-    console.log('Migration check completed (tables may not exist yet):', error);
-  }
-
-  return migrations;
-}
+import { ensureDatabase } from '@/lib/migrate';
 
 export async function POST(request: NextRequest) {
   try {
     // ═══ الخطوة 1: ترحيل قاعدة البيانات ═══
-    const migrations = await migrateDatabase();
+    await ensureDatabase();
 
     // ═══ الخطوة 2: بيانات المدير الافتراضية ═══
     try {
-      const existingAdmin = await db.admin.findUnique({
-        where: { email: 'admin@forexyemeni.com' },
-      });
+      const existingAdmin = await db.admin.findFirst();
 
       if (!existingAdmin) {
         const defaultPassword = 'Admin@123';
@@ -83,6 +21,17 @@ export async function POST(request: NextRequest) {
             email: 'admin@forexyemeni.com',
             password: hashedPassword,
             name: 'المدير',
+            isDefaultPassword: true,
+          },
+        });
+      } else if (!existingAdmin.password || existingAdmin.password === '') {
+        // إذا المدير موجود لكن بدون كلمة مرور مشفرة (من النظام القديم)
+        const hashedPassword = await hashPassword('Admin@123');
+        await db.admin.update({
+          where: { id: existingAdmin.id },
+          data: {
+            email: existingAdmin.email || 'admin@forexyemeni.com',
+            password: hashedPassword,
             isDefaultPassword: true,
           },
         });
@@ -180,12 +129,9 @@ export async function POST(request: NextRequest) {
       }
     } catch {}
 
-    return NextResponse.json({
-      success: true,
-      message: 'تم تهيئة البيانات بنجاح',
-      migrations: migrations.length > 0 ? migrations : undefined,
-    });
+    return NextResponse.json({ success: true, message: 'تم تهيئة البيانات بنجاح' });
   } catch (error) {
+    console.error('Seed error:', error);
     return NextResponse.json(
       { error: 'حدث خطأ أثناء تهيئة البيانات', details: String(error) },
       { status: 500 }

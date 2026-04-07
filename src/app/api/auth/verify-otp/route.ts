@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { generateSessionToken } from '@/lib/auth';
+import { ensureDatabase } from '@/lib/migrate';
 
 export async function POST(request: NextRequest) {
   try {
+    await ensureDatabase();
+
     const { email, otp } = await request.json();
 
     if (!email || !otp) {
@@ -26,7 +29,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // التحقق من OTP
     if (!user.otp || user.otp !== otp) {
       return NextResponse.json(
         { error: 'رمز التحقق غير صحيح' },
@@ -34,7 +36,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // التحقق من انتهاء الصلاحية
     if (user.otpExpiry && new Date() > user.otpExpiry) {
       return NextResponse.json(
         { error: 'انتهت صلاحية رمز التحقق. أعد الإرسال' },
@@ -42,7 +43,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // إنشاء جلسة جديدة و تعيين الحساب كموثق
     const sessionToken = generateSessionToken();
 
     await db.user.update({
@@ -66,9 +66,10 @@ export async function POST(request: NextRequest) {
         role: user.role,
       },
     });
-  } catch {
+  } catch (error) {
+    console.error('Verify OTP error:', error);
     return NextResponse.json(
-      { error: 'حدث خطأ أثناء التحقق' },
+      { error: 'حدث خطأ أثناء التحقق', details: String(error) },
       { status: 500 }
     );
   }

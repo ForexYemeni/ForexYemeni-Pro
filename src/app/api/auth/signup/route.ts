@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { hashPassword, generateOTP, sendOTPEmail } from '@/lib/auth';
+import { ensureDatabase } from '@/lib/migrate';
 
 export async function POST(request: NextRequest) {
   try {
+    // ترحيل قاعدة البيانات أولاً
+    await ensureDatabase();
+
     const { email, password, name } = await request.json();
 
     if (!email || !password || !name) {
@@ -13,7 +17,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate email
     if (!email.includes('@') || email.length < 5) {
       return NextResponse.json(
         { error: 'البريد الإلكتروني غير صالح' },
@@ -21,7 +24,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate password (min 6 chars)
     if (password.length < 6) {
       return NextResponse.json(
         { error: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' },
@@ -29,7 +31,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate name
     if (name.trim().length < 2) {
       return NextResponse.json(
         { error: 'الاسم مطلوب (حرفين على الأقل)' },
@@ -39,7 +40,6 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    // Check if email already exists
     const existing = await db.user.findUnique({
       where: { email: normalizedEmail },
     });
@@ -51,14 +51,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash password
     const hashedPassword = await hashPassword(password);
-
-    // Generate OTP
     const otp = generateOTP();
-    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
-    // Create user (not verified yet)
     await db.user.create({
       data: {
         email: normalizedEmail,
@@ -71,7 +67,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Send OTP email
     const emailSent = await sendOTPEmail(normalizedEmail, otp);
 
     return NextResponse.json({
@@ -81,8 +76,9 @@ export async function POST(request: NextRequest) {
       ...(process.env.NODE_ENV !== 'production' && !emailSent ? { devOTP: otp } : {}),
     });
   } catch (error) {
+    console.error('Signup error:', error);
     return NextResponse.json(
-      { error: 'حدث خطأ أثناء إنشاء الحساب' },
+      { error: 'حدث خطأ أثناء إنشاء الحساب', details: String(error) },
       { status: 500 }
     );
   }

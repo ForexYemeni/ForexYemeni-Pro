@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { verifyPassword, generateSessionToken } from '@/lib/auth';
+import { ensureDatabase } from '@/lib/migrate';
 
 export async function POST(request: NextRequest) {
   try {
+    // ترحيل قاعدة البيانات أولاً
+    await ensureDatabase();
+
     const { email, password } = await request.json();
 
     if (!email || !password) {
@@ -26,15 +30,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user is verified
-    if (!user.isVerified) {
-      return NextResponse.json(
-        { error: 'هذا الحساب لم يتم التحقق بعد', code: 'NOT_VERIFIED' },
-        { status: 403 }
-      );
-    }
-
-    // Verify password
+    // التحقق من كلمة المرور
     const isPasswordValid = await verifyPassword(password, user.password);
 
     if (!isPasswordValid) {
@@ -44,7 +40,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate session token
+    // التحقق من حالة الحساب
+    if (user.isVerified === false) {
+      return NextResponse.json(
+        { error: 'هذا الحساب لم يتم التحقق بعد', code: 'NOT_VERIFIED' },
+        { status: 403 }
+      );
+    }
+
+    // إنشاء جلسة
     const sessionToken = generateSessionToken();
 
     await db.user.update({
@@ -62,9 +66,10 @@ export async function POST(request: NextRequest) {
         role: user.role,
       },
     });
-  } catch {
+  } catch (error) {
+    console.error('Login error:', error);
     return NextResponse.json(
-      { error: 'حدث خطأ أثناء تسجيل الدخول' },
+      { error: 'حدث خطأ أثناء تسجيل الدخول', details: String(error) },
       { status: 500 }
     );
   }
