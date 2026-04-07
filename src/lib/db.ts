@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
+import { neon } from '@neondatabase/serverless'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -9,11 +10,15 @@ function createPrismaClient() {
   const databaseUrl = process.env.DATABASE_URL
 
   if (databaseUrl && databaseUrl.startsWith('postgres')) {
-    const adapter = new PrismaPg({ connectionString: databaseUrl })
-    return new PrismaClient({ adapter })
+    try {
+      const sql = neon(databaseUrl)
+      const adapter = new PrismaPg({ queryer: sql })
+      return new PrismaClient({ adapter })
+    } catch {
+      return new PrismaClient()
+    }
   }
 
-  // Fallback: SQLite محلي للتطوير
   return new PrismaClient()
 }
 

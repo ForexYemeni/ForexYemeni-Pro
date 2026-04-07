@@ -25,18 +25,24 @@ export default function HomePage() {
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [isSeeding, setIsSeeding] = useState(true);
 
-  // Seed data on first load
+  // إعداد قاعدة البيانات والبيانات الأولية
   useEffect(() => {
-    const seedData = async () => {
+    const setup = async () => {
+      try {
+        // إنشاء الجداول وبيانات المدير
+        await fetch('/api');
+      } catch {
+        // ignore
+      }
       try {
         await fetch('/api/seed', { method: 'POST' });
       } catch {
-        // Seed might fail if data exists, that's ok
+        // ignore
       } finally {
         setIsSeeding(false);
       }
     };
-    seedData();
+    setup();
   }, []);
 
   const fetchSignals = useCallback(async () => {
