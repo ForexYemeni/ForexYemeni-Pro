@@ -8,12 +8,13 @@ datasource db {
 }
 
 model Admin {
-  id        String   @id @default(cuid())
-  username  String   @unique
-  password  String
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String   @id @default(cuid())
+  email             String   @unique
+  password          String
+  name              String
+  isDefaultPassword Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Signal {
@@ -71,7 +72,9 @@ model User {
   id            String    @id @default(cuid())
   email         String    @unique
   name          String
+  password      String
   role          String    @default("user")
+  isVerified    Boolean   @default(false)
   otp           String?
   otpExpiry     DateTime?
   sessionToken  String?

@@ -42,13 +42,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // إنشاء جلسة جديدة
+    // إنشاء جلسة جديدة و تعيين الحساب كموثق
     const sessionToken = generateSessionToken();
 
     await db.user.update({
       where: { email: normalizedEmail },
       data: {
         sessionToken,
+        isVerified: true,
         otp: null,
         otpExpiry: null,
       },
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'تم تسجيل الدخول بنجاح',
+      message: 'تم التحقق بنجاح',
       token: sessionToken,
       user: {
         id: user.id,
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
         role: user.role,
       },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'حدث خطأ أثناء التحقق' },
       { status: 500 }

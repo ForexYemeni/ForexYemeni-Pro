@@ -1,21 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { hashPassword } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-
-    // Seed admin
+    // Seed default admin
     const existingAdmin = await db.admin.findUnique({
-      where: { username: 'admin' },
+      where: { email: 'admin@forexyemeni.com' },
     });
 
     if (!existingAdmin) {
+      const defaultPassword = 'Admin@123';
+      const hashedPassword = await hashPassword(defaultPassword);
+
       await db.admin.create({
         data: {
-          username: 'admin',
-          password: 'forex2024',
-          name: 'المدير العام',
+          email: 'admin@forexyemeni.com',
+          password: hashedPassword,
+          name: 'المدير',
+          isDefaultPassword: true,
         },
       });
     }

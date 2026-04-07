@@ -1,56 +1,119 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { TrendingUp, Mail, User, ArrowLeft, ShieldCheck } from 'lucide-react';
+import { TrendingUp, Mail, User, ArrowLeft, ShieldCheck, Lock, Eye, EyeOff } from 'lucide-react';
 
 interface AuthPageProps {
   onAuthSuccess: (user: { id: string; email: string; name: string; role: string; token: string }) => void;
 }
 
-type AuthMode = 'choice' | 'login' | 'register' | 'otp';
-type Step = 'email' | 'otp';
+type AuthMode = 'choice' | 'login' | 'register';
 
 export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
   const [mode, setMode] = useState<AuthMode>('choice');
-  const [step, setStep] = useState<Step>('email');
+  const [step, setStep] = useState<'form' | 'otp'>('form');
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [countdown, setCountdown] = useState(0);
   const [devOTP, setDevOTP] = useState('');
+  const [needsVerification, setNeedsVerification] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // مؤقت العد التنازلي
+  // Reset state when switching modes
+  useEffect(() => {
+    setError('');
+    setSuccess('');
+    setPassword('');
+    setName('');
+    setEmail('');
+    setShowPassword(false);
+    setDevOTP('');
+    setNeedsVerification(false);
+  }, [mode]);
+
+  // Countdown timer
   useEffect(() => {
     if (countdown <= 0) return;
     const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
     return () => clearTimeout(timer);
   }, [countdown]);
 
-  // التركيز على أول خانة OTP
+  // Focus first OTP input
   useEffect(() => {
     if (step === 'otp' && inputRefs.current[0]) {
       inputRefs.current[0].focus();
     }
   }, [step]);
 
-  const handleSendOTP = useCallback(async () => {
+  const handleLogin = useCallback(async () => {
+    if (!email.includes('@') || password.length < 1) return;
+
     setLoading(true);
     setError('');
     setSuccess('');
 
     try {
-      const res = await fetch('/api/auth/send-otp', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          name: mode === 'register' ? name : undefined,
-          mode: mode === 'register' ? 'register' : 'login',
-        }),
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (data.code === 'NOT_VERIFIED') {
+          setNeedsVerification(true);
+          setError('هذا الحساب لم يتم التحقق بعد. أدخل رمز التحقق');
+          setStep('otp');
+          // Request OTP resend
+          const resendRes = await fetch('/api/auth/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+          });
+          const resendData = await resendRes.json();
+          if (resendData.devOTP) setDevOTP(resendData.devOTP);
+          setCountdown(60);
+          setOtp(['', '', '', '', '', '']);
+        } else {
+          setError(data.error || 'حدث خطأ');
+        }
+        return;
+      }
+
+      onAuthSuccess({
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        role: data.user.role,
+        token: data.token,
+      });
+    } catch {
+      setError('خطأ في الاتصال بالخادم');
+    } finally {
+      setLoading(false);
+    }
+  }, [email, password, onAuthSuccess]);
+
+  const handleSignup = useCallback(async () => {
+    if (!email.includes('@') || password.length < 6 || name.trim().length < 2) return;
+
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name }),
       });
 
       const data = await res.json();
@@ -72,7 +135,7 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
     } finally {
       setLoading(false);
     }
-  }, [email, name, mode]);
+  }, [email, password, name]);
 
   const handleVerifyOTP = useCallback(async () => {
     const otpCode = otp.join('');
@@ -112,6 +175,37 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
     }
   }, [email, otp, onAuthSuccess]);
 
+  const handleResendOTP = useCallback(async () => {
+    if (countdown > 0 || loading) return;
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'حدث خطأ');
+        return;
+      }
+
+      if (data.devOTP) setDevOTP(data.devOTP);
+      setCountdown(60);
+      setOtp(['', '', '', '', '', '']);
+      setSuccess('تم إعادة إرسال رمز التحقق');
+    } catch {
+      setError('خطأ في الاتصال بالخادم');
+    } finally {
+      setLoading(false);
+    }
+  }, [email, countdown, loading]);
+
   const handleOtpChange = (index: number, value: string) => {
     if (!/^\d*$/.test(value)) return;
 
@@ -119,12 +213,11 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
     newOtp[index] = value.slice(-1);
     setOtp(newOtp);
 
-    // التركيز على الخانة التالية
     if (value && index < 5) {
       inputRefs.current[index + 1]?.focus();
     }
 
-    // التحقق التلقائي عند إكمال 6 أرقام
+    // Auto-verify on complete
     if (newOtp.every(d => d !== '') && newOtp.join('').length === 6) {
       setTimeout(() => {
         handleVerifyOTP();
@@ -145,38 +238,39 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
       const newOtp = pasted.split('');
       setOtp(newOtp);
       inputRefs.current[5]?.focus();
-      // التحقق التلقائي
-      setTimeout(() => {
-        const verify = async () => {
-          setLoading(true);
-          setError('');
-          try {
-            const res = await fetch('/api/auth/verify-otp', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, otp: pasted }),
-            });
-            const data = await res.json();
-            if (!res.ok) { setError(data.error); return; }
-            onAuthSuccess({ id: data.user.id, email: data.user.email, name: data.user.name, role: data.user.role, token: data.token });
-          } catch { setError('خطأ في الاتصال'); }
-          finally { setLoading(false); }
-        };
-        verify();
+      setTimeout(async () => {
+        setLoading(true);
+        setError('');
+        try {
+          const res = await fetch('/api/auth/verify-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, otp: pasted }),
+          });
+          const data = await res.json();
+          if (!res.ok) { setError(data.error); return; }
+          onAuthSuccess({ id: data.user.id, email: data.user.email, name: data.user.name, role: data.user.role, token: data.token });
+        } catch { setError('خطأ في الاتصال'); }
+        finally { setLoading(false); }
       }, 300);
     }
   };
 
   const handleBack = () => {
     if (step === 'otp') {
-      setStep('email');
+      setStep('form');
       setError('');
       setSuccess('');
+      setNeedsVerification(false);
     } else {
       setMode('choice');
-      setStep('email');
+      setStep('form');
       setError('');
       setSuccess('');
+      setPassword('');
+      setName('');
+      setEmail('');
+      setNeedsVerification(false);
     }
   };
 
@@ -185,6 +279,9 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
     const s = seconds % 60;
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
+
+  const isLoginDisabled = loading || !email.includes('@') || password.length < 1;
+  const isSignupDisabled = loading || !email.includes('@') || password.length < 6 || name.trim().length < 2;
 
   return (
     <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: '#0a0e17' }}>
@@ -200,7 +297,7 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
 
         {/* Auth Card */}
         <div className="rounded-2xl border border-trading-border bg-trading-card p-6">
-          {/* ═══ شريط الرجوع ═══ */}
+          {/* Back button */}
           {mode !== 'choice' && (
             <button
               onClick={handleBack}
@@ -211,7 +308,7 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
             </button>
           )}
 
-          {/* ═══ اختيار: تسجيل دخول أو حساب جديد ═══ */}
+          {/* ═══ Choice Screen ═══ */}
           {mode === 'choice' && (
             <div className="space-y-4">
               <h2 className="text-center text-lg font-bold text-trading-text">مرحباً بك</h2>
@@ -224,7 +321,7 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 className="w-full rounded-xl bg-gradient-to-l from-trading-gold to-amber-600 px-4 py-3.5 text-sm font-bold text-black transition-all hover:shadow-lg hover:shadow-trading-gold/20"
               >
                 <div className="flex items-center justify-center gap-2">
-                  <Mail className="h-4 w-4" />
+                  <Lock className="h-4 w-4" />
                   تسجيل الدخول
                 </div>
               </button>
@@ -247,34 +344,12 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
             </div>
           )}
 
-          {/* ═══ خطوة البريد الإلكتروني ═══ */}
-          {step === 'email' && mode !== 'choice' && (
+          {/* ═══ Login Form ═══ */}
+          {mode === 'login' && step === 'form' && (
             <div className="space-y-4">
-              <h2 className="text-lg font-bold text-trading-text">
-                {mode === 'register' ? 'إنشاء حساب جديد' : 'تسجيل الدخول'}
-              </h2>
+              <h2 className="text-lg font-bold text-trading-text">تسجيل الدخول</h2>
 
-              {/* حقل الاسم (للتسجيل فقط) */}
-              {mode === 'register' && (
-                <div>
-                  <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">
-                    الاسم الكامل
-                  </label>
-                  <div className="relative">
-                    <User className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="أدخل اسمك"
-                      className="w-full rounded-xl border border-trading-border bg-trading-bg py-3 pr-10 pl-4 text-sm text-trading-text placeholder:text-trading-text-secondary/50 focus:border-trading-gold focus:outline-none focus:ring-1 focus:ring-trading-gold/30"
-                      dir="rtl"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* حقل البريد */}
+              {/* Email */}
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">
                   البريد الإلكتروني
@@ -288,33 +363,150 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                     placeholder="example@email.com"
                     className="w-full rounded-xl border border-trading-border bg-trading-bg py-3 pr-10 pl-4 text-sm text-trading-text placeholder:text-trading-text-secondary/50 focus:border-trading-gold focus:outline-none focus:ring-1 focus:ring-trading-gold/30"
                     dir="ltr"
-                    onKeyDown={(e) => e.key === 'Enter' && handleSendOTP()}
+                    onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
                   />
                 </div>
               </div>
 
-              {/* زر الإرسال */}
+              {/* Password */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">
+                  كلمة المرور
+                </label>
+                <div className="relative">
+                  <Lock className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-xl border border-trading-border bg-trading-bg py-3 pr-10 pl-10 text-sm text-trading-text placeholder:text-trading-text-secondary/50 focus:border-trading-gold focus:outline-none focus:ring-1 focus:ring-trading-gold/30"
+                    dir="ltr"
+                    onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-trading-text-secondary hover:text-trading-text"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Login Button */}
               <button
-                onClick={handleSendOTP}
-                disabled={loading || !email.includes('@') || (mode === 'register' && name.trim().length < 2)}
+                onClick={handleLogin}
+                disabled={isLoginDisabled}
                 className="w-full rounded-xl bg-gradient-to-l from-trading-gold to-amber-600 py-3 text-sm font-bold text-black transition-all hover:shadow-lg hover:shadow-trading-gold/20 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? (
                   <div className="flex items-center justify-center gap-2">
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" />
-                    جاري الإرسال...
+                    جاري التحقق...
                   </div>
                 ) : (
                   <div className="flex items-center justify-center gap-2">
-                    <ShieldCheck className="h-4 w-4" />
-                    إرسال رمز التحقق
+                    <Lock className="h-4 w-4" />
+                    تسجيل الدخول
                   </div>
                 )}
               </button>
             </div>
           )}
 
-          {/* ═══ خطوة OTP ═══ */}
+          {/* ═══ Register Form ═══ */}
+          {mode === 'register' && step === 'form' && (
+            <div className="space-y-4">
+              <h2 className="text-lg font-bold text-trading-text">إنشاء حساب جديد</h2>
+
+              {/* Name */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">
+                  الاسم الكامل
+                </label>
+                <div className="relative">
+                  <User className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="أدخل اسمك"
+                    className="w-full rounded-xl border border-trading-border bg-trading-bg py-3 pr-10 pl-4 text-sm text-trading-text placeholder:text-trading-text-secondary/50 focus:border-trading-gold focus:outline-none focus:ring-1 focus:ring-trading-gold/30"
+                    dir="rtl"
+                  />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">
+                  البريد الإلكتروني
+                </label>
+                <div className="relative">
+                  <Mail className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="example@email.com"
+                    className="w-full rounded-xl border border-trading-border bg-trading-bg py-3 pr-10 pl-4 text-sm text-trading-text placeholder:text-trading-text-secondary/50 focus:border-trading-gold focus:outline-none focus:ring-1 focus:ring-trading-gold/30"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-trading-text-secondary">
+                  كلمة المرور
+                </label>
+                <div className="relative">
+                  <Lock className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="6 أحرف على الأقل"
+                    className="w-full rounded-xl border border-trading-border bg-trading-bg py-3 pr-10 pl-10 text-sm text-trading-text placeholder:text-trading-text-secondary/50 focus:border-trading-gold focus:outline-none focus:ring-1 focus:ring-trading-gold/30"
+                    dir="ltr"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSignup()}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-trading-text-secondary hover:text-trading-text"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {password.length > 0 && password.length < 6 && (
+                  <p className="mt-1 text-[10px] text-trading-sell">كلمة المرور يجب أن تكون 6 أحرف على الأقل</p>
+                )}
+              </div>
+
+              {/* Signup Button */}
+              <button
+                onClick={handleSignup}
+                disabled={isSignupDisabled}
+                className="w-full rounded-xl bg-gradient-to-l from-trading-gold to-amber-600 py-3 text-sm font-bold text-black transition-all hover:shadow-lg hover:shadow-trading-gold/20 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-black/30 border-t-black" />
+                    جاري إنشاء الحساب...
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-2">
+                    <ShieldCheck className="h-4 w-4" />
+                    إنشاء حساب
+                  </div>
+                )}
+              </button>
+            </div>
+          )}
+
+          {/* ═══ OTP Step ═══ */}
           {step === 'otp' && (
             <div className="space-y-4">
               <h2 className="text-lg font-bold text-trading-text">رمز التحقق</h2>
@@ -340,7 +532,7 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 ))}
               </div>
 
-              {/* عرض OTP للتجربة */}
+              {/* Dev OTP */}
               {devOTP && (
                 <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 text-center">
                   <p className="text-[10px] text-blue-400">رمز التحقق (للتجربة):</p>
@@ -348,7 +540,7 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                 </div>
               )}
 
-              {/* زر التحقق */}
+              {/* Verify Button */}
               <button
                 onClick={handleVerifyOTP}
                 disabled={loading || otp.join('').length !== 6}
@@ -360,11 +552,14 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                     جاري التحقق...
                   </div>
                 ) : (
-                  'تأكيد'
+                  <div className="flex items-center justify-center gap-2">
+                    <ShieldCheck className="h-4 w-4" />
+                    تأكيد
+                  </div>
                 )}
               </button>
 
-              {/* إعادة الإرسال */}
+              {/* Resend */}
               <div className="text-center">
                 {countdown > 0 ? (
                   <p className="text-xs text-trading-text-secondary">
@@ -372,7 +567,7 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
                   </p>
                 ) : (
                   <button
-                    onClick={handleSendOTP}
+                    onClick={handleResendOTP}
                     disabled={loading}
                     className="text-xs font-medium text-trading-gold hover:underline disabled:opacity-50"
                   >
@@ -383,13 +578,13 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
             </div>
           )}
 
-          {/* رسائل الخطأ والنجاح */}
+          {/* Error/Success Messages */}
           {error && (
             <div className="mt-4 rounded-lg border border-trading-sell/20 bg-trading-sell/5 p-3 text-center text-xs text-trading-sell">
               {error}
             </div>
           )}
-          {success && step === 'email' && (
+          {success && step === 'form' && (
             <div className="mt-4 rounded-lg border border-trading-buy/20 bg-trading-buy/5 p-3 text-center text-xs text-trading-buy">
               {success}
             </div>

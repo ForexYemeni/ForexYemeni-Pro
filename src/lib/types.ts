@@ -38,8 +38,9 @@ export interface Signal {
 
 export interface AdminUser {
   id: string;
-  username: string;
+  email: string;
   name: string;
+  isDefaultPassword: boolean;
 }
 
 export interface LicenseKey {

@@ -4,7 +4,7 @@ import { generateOTP, sendOTPEmail } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, name, mode } = await request.json();
+    const { email } = await request.json();
 
     if (!email || !email.includes('@')) {
       return NextResponse.json(
@@ -15,84 +15,44 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    if (mode === 'register') {
-      // تسجيل جديد
-      if (!name || name.trim().length < 2) {
-        return NextResponse.json(
-          { error: 'الاسم مطلوب (حرفين على الأقل)' },
-          { status: 400 }
-        );
-      }
+    // Find user - only allow resending OTP for unverified users
+    const user = await db.user.findUnique({
+      where: { email: normalizedEmail },
+    });
 
-      const existing = await db.user.findUnique({
-        where: { email: normalizedEmail },
-      });
-
-      if (existing) {
-        return NextResponse.json(
-          { error: 'هذا البريد مسجل مسبقاً. سجّل دخولك' },
-          { status: 409 }
-        );
-      }
-
-      // إنشاء الحساب مع OTP
-      const otp = generateOTP();
-      const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 دقائق
-
-      await db.user.create({
-        data: {
-          email: normalizedEmail,
-          name: name.trim(),
-          role: 'user',
-          otp,
-          otpExpiry,
-        },
-      });
-
-      // محاولة إرسال البريد
-      const emailSent = await sendOTPEmail(normalizedEmail, otp);
-
-      return NextResponse.json({
-        success: true,
-        message: 'تم إنشاء الحساب. أدخل رمز التحقق',
-        emailSent,
-        // للتجربة: إرجاع OTP إذا لم يتم إرسال البريد
-        ...(process.env.NODE_ENV !== 'production' && !emailSent ? { devOTP: otp } : {}),
-      });
-
-    } else {
-      // تسجيل دخول
-      const user = await db.user.findUnique({
-        where: { email: normalizedEmail },
-      });
-
-      if (!user) {
-        return NextResponse.json(
-          { error: 'حساب غير موجود. سجّل أولاً' },
-          { status: 404 }
-        );
-      }
-
-      // توليد OTP جديد
-      const otp = generateOTP();
-      const otpExpiry = new Date(Date.now() + 5 * 60 * 1000);
-
-      await db.user.update({
-        where: { email: normalizedEmail },
-        data: { otp, otpExpiry },
-      });
-
-      // محاولة إرسال البريد
-      const emailSent = await sendOTPEmail(normalizedEmail, otp);
-
-      return NextResponse.json({
-        success: true,
-        message: 'تم إرسال رمز التحقق',
-        emailSent,
-        ...(process.env.NODE_ENV !== 'production' && !emailSent ? { devOTP: otp } : {}),
-      });
+    if (!user) {
+      return NextResponse.json(
+        { error: 'حساب غير موجود' },
+        { status: 404 }
+      );
     }
-  } catch (error) {
+
+    if (user.isVerified) {
+      return NextResponse.json(
+        { error: 'هذا الحساب تم التحقق منه بالفعل. سجّل دخولك' },
+        { status: 400 }
+      );
+    }
+
+    // Generate new OTP
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+
+    await db.user.update({
+      where: { email: normalizedEmail },
+      data: { otp, otpExpiry },
+    });
+
+    // Send OTP email
+    const emailSent = await sendOTPEmail(normalizedEmail, otp);
+
+    return NextResponse.json({
+      success: true,
+      message: 'تم إرسال رمز التحقق',
+      emailSent,
+      ...(process.env.NODE_ENV !== 'production' && !emailSent ? { devOTP: otp } : {}),
+    });
+  } catch {
     return NextResponse.json(
       { error: 'حدث خطأ أثناء إرسال رمز التحقق' },
       { status: 500 }

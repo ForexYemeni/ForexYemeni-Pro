@@ -1,16 +1,203 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Plus, Trash2, Eye, EyeOff, Check, X, RefreshCw, Key, TrendingUp } from 'lucide-react';
-import type { Signal, LicenseKey } from '@/lib/types';
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, Trash2, Eye, EyeOff, Check, X, RefreshCw, Key, TrendingUp, Lock, AlertTriangle } from 'lucide-react';
+import type { Signal, AdminUser } from '@/lib/types';
 import SignalForm from './SignalForm';
 import LicenseManager from './LicenseManager';
 
 interface AdminDashboardProps {
+  admin: AdminUser;
+  onPasswordChanged: (admin: AdminUser) => void;
   onLogout: () => void;
 }
 
-export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
+// Force Password Change Component
+function ForcePasswordChange({ admin, onPasswordChanged }: { admin: AdminUser; onPasswordChanged: (admin: AdminUser) => void }) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    if (newPassword.length < 6) {
+      setError('كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('كلمة المرور الجديدة غير متطابقة');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/auth/admin/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminId: admin.id,
+          currentPassword,
+          newPassword,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'حدث خطأ');
+        return;
+      }
+
+      setSuccess('تم تغيير كلمة المرور بنجاح');
+      // Update admin with new state
+      onPasswordChanged({ ...admin, isDefaultPassword: false });
+    } catch {
+      setError('خطأ في الاتصال بالخادم');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="mx-auto max-w-md py-12">
+      <div className="mb-8 text-center">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-trading-sell/20 to-trading-sell/5 border border-trading-sell/30">
+          <AlertTriangle className="h-8 w-8 text-trading-sell" />
+        </div>
+        <h2 className="text-xl font-bold text-trading-text">تغيير كلمة المرور مطلوب</h2>
+        <p className="mt-2 text-sm text-trading-text-secondary">
+          أنت تستخدم كلمة المرور الافتراضية. يرجى تغييرها للمتابعة.
+        </p>
+      </div>
+
+      <form onSubmit={handleChangePassword} className="rounded-xl border border-trading-border bg-trading-card p-6 space-y-4">
+        {/* Current Password */}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-trading-text-secondary">
+            كلمة المرور الحالية
+          </label>
+          <div className="relative">
+            <Lock className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
+            <input
+              type={showCurrent ? 'text' : 'password'}
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              dir="ltr"
+              className="w-full rounded-lg border border-trading-border bg-trading-bg py-2.5 pr-10 pl-10 text-sm text-trading-text placeholder:text-trading-text-secondary/50 focus:border-trading-gold focus:outline-none focus:ring-1 focus:ring-trading-gold"
+            />
+            <button
+              type="button"
+              onClick={() => setShowCurrent(!showCurrent)}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-trading-text-secondary hover:text-trading-text"
+            >
+              {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </div>
+
+        {/* New Password */}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-trading-text-secondary">
+            كلمة المرور الجديدة
+          </label>
+          <div className="relative">
+            <Lock className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
+            <input
+              type={showNew ? 'text' : 'password'}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="6 أحرف على الأقل"
+              required
+              dir="ltr"
+              className="w-full rounded-lg border border-trading-border bg-trading-bg py-2.5 pr-10 pl-10 text-sm text-trading-text placeholder:text-trading-text-secondary/50 focus:border-trading-gold focus:outline-none focus:ring-1 focus:ring-trading-gold"
+            />
+            <button
+              type="button"
+              onClick={() => setShowNew(!showNew)}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-trading-text-secondary hover:text-trading-text"
+            >
+              {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          {newPassword.length > 0 && newPassword.length < 6 && (
+            <p className="mt-1 text-[10px] text-trading-sell">كلمة المرور يجب أن تكون 6 أحرف على الأقل</p>
+          )}
+        </div>
+
+        {/* Confirm New Password */}
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-trading-text-secondary">
+            تأكيد كلمة المرور الجديدة
+          </label>
+          <div className="relative">
+            <Lock className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
+            <input
+              type={showConfirm ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="أعد إدخال كلمة المرور"
+              required
+              dir="ltr"
+              className="w-full rounded-lg border border-trading-border bg-trading-bg py-2.5 pr-10 pl-10 text-sm text-trading-text placeholder:text-trading-text-secondary/50 focus:border-trading-gold focus:outline-none focus:ring-1 focus:ring-trading-gold"
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirm(!showConfirm)}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-trading-text-secondary hover:text-trading-text"
+            >
+              {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          {confirmPassword.length > 0 && newPassword !== confirmPassword && (
+            <p className="mt-1 text-[10px] text-trading-sell">كلمة المرور غير متطابقة</p>
+          )}
+        </div>
+
+        {error && (
+          <div className="rounded-lg bg-trading-sell/10 border border-trading-sell/20 p-3 text-center text-sm text-trading-sell">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="rounded-lg bg-trading-buy/10 border border-trading-buy/20 p-3 text-center text-sm text-trading-buy">
+            {success}
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={isLoading || newPassword.length < 6 || newPassword !== confirmPassword || !currentPassword}
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-l from-trading-gold to-yellow-600 py-2.5 text-sm font-bold text-trading-bg transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {isLoading ? (
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-trading-bg border-t-transparent" />
+          ) : (
+            <>
+              <Lock className="h-4 w-4" />
+              تغيير كلمة المرور
+            </>
+          )}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// Main Admin Dashboard
+export default function AdminDashboard({ admin, onPasswordChanged, onLogout }: AdminDashboardProps) {
   const [signals, setSignals] = useState<Signal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -93,6 +280,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     SL_HIT: { label: 'خاسرة', color: 'text-trading-sell' },
     CLOSED: { label: 'مغلقة', color: 'text-gray-400' },
   };
+
+  // If admin has default password, force change (after all hooks)
+  if (admin.isDefaultPassword) {
+    return <ForcePasswordChange admin={admin} onPasswordChanged={onPasswordChanged} />;
+  }
 
   return (
     <div>

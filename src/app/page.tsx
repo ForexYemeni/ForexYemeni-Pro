@@ -137,6 +137,10 @@ export default function HomePage() {
     setCurrentView('admin-dashboard');
   };
 
+  const handleAdminPasswordChanged = (admin: AdminUser) => {
+    setAdminUser(admin);
+  };
+
   const handleAdminLogout = () => {
     setAdminUser(null);
     setIsAdmin(false);
@@ -210,8 +214,12 @@ export default function HomePage() {
           <AdminLogin onLogin={handleAdminLogin} onBack={() => setCurrentView('user')} />
         )}
 
-        {currentView === 'admin-dashboard' && (
-          <AdminDashboard onLogout={handleAdminLogout} />
+        {currentView === 'admin-dashboard' && adminUser && (
+          <AdminDashboard
+            admin={adminUser}
+            onPasswordChanged={handleAdminPasswordChanged}
+            onLogout={handleAdminLogout}
+          />
         )}
       </main>
 

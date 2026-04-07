@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { verifyPassword, generateSessionToken } from '@/lib/auth';
+import { verifyPassword } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,27 +15,19 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.toLowerCase().trim();
 
-    const user = await db.user.findUnique({
+    const admin = await db.admin.findUnique({
       where: { email: normalizedEmail },
     });
 
-    if (!user) {
+    if (!admin) {
       return NextResponse.json(
         { error: 'البريد الإلكتروني أو كلمة المرور غير صحيحة' },
         { status: 401 }
       );
     }
 
-    // Check if user is verified
-    if (!user.isVerified) {
-      return NextResponse.json(
-        { error: 'هذا الحساب لم يتم التحقق بعد', code: 'NOT_VERIFIED' },
-        { status: 403 }
-      );
-    }
-
-    // Verify password
-    const isPasswordValid = await verifyPassword(password, user.password);
+    // Verify password with bcrypt
+    const isPasswordValid = await verifyPassword(password, admin.password);
 
     if (!isPasswordValid) {
       return NextResponse.json(
@@ -44,22 +36,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate session token
-    const sessionToken = generateSessionToken();
-
-    await db.user.update({
-      where: { email: normalizedEmail },
-      data: { sessionToken },
-    });
-
     return NextResponse.json({
       success: true,
-      token: sessionToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
+      admin: {
+        id: admin.id,
+        email: admin.email,
+        name: admin.name,
+        isDefaultPassword: admin.isDefaultPassword,
       },
     });
   } catch {

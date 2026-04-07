@@ -1,15 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Lock, User, Eye, EyeOff, LogIn } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, LogIn } from 'lucide-react';
+import type { AdminUser } from '@/lib/types';
 
 interface AdminLoginProps {
-  onLogin: (admin: { id: string; username: string; name: string }) => void;
+  onLogin: (admin: AdminUser) => void;
   onBack: () => void;
 }
 
 export default function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -21,10 +22,10 @@ export default function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
     setIsLoading(true);
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
@@ -60,16 +61,17 @@ export default function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
           <div className="rounded-xl border border-trading-border bg-trading-card p-6 space-y-4">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-trading-text-secondary">
-                اسم المستخدم
+                البريد الإلكتروني
               </label>
               <div className="relative">
-                <User className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
+                <Mail className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-trading-text-secondary" />
                 <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@forexyemeni.com"
                   required
+                  dir="ltr"
                   className="w-full rounded-lg border border-trading-border bg-trading-bg py-2.5 pr-10 pl-3 text-sm text-trading-text placeholder:text-trading-text-secondary/50 focus:border-trading-gold focus:outline-none focus:ring-1 focus:ring-trading-gold"
                 />
               </div>
@@ -87,6 +89,7 @@ export default function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
+                  dir="ltr"
                   className="w-full rounded-lg border border-trading-border bg-trading-bg py-2.5 pr-10 pl-10 text-sm text-trading-text placeholder:text-trading-text-secondary/50 focus:border-trading-gold focus:outline-none focus:ring-1 focus:ring-trading-gold"
                 />
                 <button
