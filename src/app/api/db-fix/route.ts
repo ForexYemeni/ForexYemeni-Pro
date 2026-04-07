@@ -1,9 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const results: Record<string, string> = {};
+  const { searchParams } = new URL(request.url);
+  const clearSignals = searchParams.get('clearSignals') === '1';
 
   try {
     // ════════════════════════════════════════════
@@ -45,7 +47,26 @@ export async function GET() {
     }
 
     // ════════════════════════════════════════════
-    // 2. إعادة تعيين كلمة مرور المدير
+    // 2. حذف الصفقات (فقط عند طلب صريح ?clearSignals=1)
+    // ════════════════════════════════════════════
+    if (clearSignals) {
+      try {
+        await db.$executeRawUnsafe(`DELETE FROM "SignalTarget"`);
+        results.deleted_signal_targets = 'ok';
+      } catch (e: any) {
+        results.deleted_signal_targets_error = e.message;
+      }
+
+      try {
+        await db.$executeRawUnsafe(`DELETE FROM "Signal"`);
+        results.deleted_signals = 'ok';
+      } catch (e: any) {
+        results.deleted_signals_error = e.message;
+      }
+    }
+
+    // ════════════════════════════════════════════
+    // 3. إعادة تعيين كلمة مرور المدير
     // ════════════════════════════════════════════
     try {
       // حذف المدير القديم الخاطئ
@@ -88,7 +109,7 @@ export async function GET() {
     }
 
     // ════════════════════════════════════════════
-    // 3. فحص نهائي
+    // 4. فحص نهائي
     // ════════════════════════════════════════════
     try {
       const admins = await db.$queryRawUnsafe(
