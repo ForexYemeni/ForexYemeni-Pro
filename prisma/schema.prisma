@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  password     String
+  role         String    @default("USER")
+  status       String    @default("PENDING")
+  plan         String    @default("TRIAL")
+  trialEndsAt  DateTime?
+  otpCode      String?
+  otpExpiresAt DateTime?
+  lotSize      Float?
+  accBalance   Float     @default(100)
+  riskPct      Float     @default(5)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  signals      Signal[]
+  readSignals  ReadSignal[]
+}
+
+model Signal {
+  id            String   @id @default(cuid())
+  type          String
+  pair          String
+  entry         Float
+  stopLoss      Float
+  stopLossType  String
+  targets       String
+  stars         Int
+  lotSize       String
+  riskAmount    Float
+  currentTP     Int      @default(0)
+  totalTargets  Int
+  status        String   @default("ACTIVE")
+  notes         String?
+  createdById   String
+  createdBy     User     @relation(fields: [createdById], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  readBy        ReadSignal[]
+}
+
+model ReadSignal {
+  id        String   @id @default(cuid())
+  userId    String
+  signalId  String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id])
+  signal    Signal   @relation(fields: [signalId], references: [id])
+
+  @@unique([userId, signalId])
+}
