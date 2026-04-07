@@ -123,13 +123,18 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
         return;
       }
 
-      setSuccess(data.message);
-      if (data.devOTP) {
-        setDevOTP(data.devOTP);
-      }
+      // عرض الرمز دائماً وتعبئته تلقائياً
+      const otpCode = data.devOTP || data.otp || '';
+      setDevOTP(otpCode);
+      setSuccess('تم إنشاء الحساب بنجاح');
       setStep('otp');
       setCountdown(60);
-      setOtp(['', '', '', '', '', '']);
+      // تعبئة خانات OTP تلقائياً بالرمز
+      if (otpCode) {
+        setOtp(otpCode.split(''));
+      } else {
+        setOtp(['', '', '', '', '', '']);
+      }
     } catch {
       setError('خطأ في الاتصال بالخادم');
     } finally {
@@ -195,9 +200,14 @@ export default function AuthPage({ onAuthSuccess }: AuthPageProps) {
         return;
       }
 
-      if (data.devOTP) setDevOTP(data.devOTP);
+      const newOtp = data.devOTP || data.otp || '';
+      setDevOTP(newOtp);
       setCountdown(60);
-      setOtp(['', '', '', '', '', '']);
+      if (newOtp) {
+        setOtp(newOtp.split(''));
+      } else {
+        setOtp(['', '', '', '', '', '']);
+      }
       setSuccess('تم إعادة إرسال رمز التحقق');
     } catch {
       setError('خطأ في الاتصال بالخادم');
