@@ -27,7 +27,7 @@ function formatDate(dateStr: string): string {
 
 export default function SignalCard({ signal }: SignalCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const [showAlertText, setShowAlertText] = useState(false);
+  const [showAlertText, setShowAlertText] = useState(true);
   const isBuy = signal.type === 'BUY';
   const isActive = signal.status === 'ACTIVE';
 
@@ -52,6 +52,25 @@ export default function SignalCard({ signal }: SignalCardProps) {
         isActive ? 'border-trading-gold/30' : 'border-trading-border'
       } bg-trading-card ${isActive ? 'signal-active-pulse' : ''}`}
     >
+      {/* Original Alert Text from TradingView - ظاهرة دائماً في الأعلى */}
+      {signal.alertText && (
+        <div className="border-b border-trading-gold/15 bg-gradient-to-l from-trading-gold/5 via-trading-gold/3 to-transparent px-4 py-3">
+          <div className="mb-1.5 flex items-center gap-1.5">
+            <FileText className="h-3.5 w-3.5 text-trading-gold" />
+            <span className="text-[11px] font-medium text-trading-gold">الإشارة الأصلية من المؤشر</span>
+          </div>
+          <div className="rounded-lg border border-trading-gold/10 bg-black/20 p-3">
+            <pre
+              dir="rtl"
+              className="whitespace-pre-wrap text-xs leading-relaxed text-trading-text sm:text-[13px]"
+              style={{ fontFamily: 'inherit', direction: 'rtl' }}
+            >
+              {signal.alertText}
+            </pre>
+          </div>
+        </div>
+      )}
+
       {/* Card Header */}
       <div
         className={`flex items-center justify-between p-4 pb-3 ${
@@ -59,7 +78,6 @@ export default function SignalCard({ signal }: SignalCardProps) {
         }`}
       >
         <div className="flex items-center gap-2.5">
-          {/* Type Badge */}
           <div
             className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-bold ${
               isBuy
@@ -67,15 +85,9 @@ export default function SignalCard({ signal }: SignalCardProps) {
                 : 'bg-trading-sell/15 text-trading-sell'
             }`}
           >
-            {isBuy ? (
-              <TrendingUp className="h-4 w-4" />
-            ) : (
-              <TrendingDown className="h-4 w-4" />
-            )}
+            {isBuy ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
             {isBuy ? 'شراء' : 'بيع'}
           </div>
-
-          {/* Pair & Timeframe */}
           <div>
             <h3 className="text-base font-bold text-trading-text sm:text-lg">{signal.pair}</h3>
             <p className="text-[11px] text-trading-text-secondary">{signal.timeframe}</p>
@@ -83,7 +95,6 @@ export default function SignalCard({ signal }: SignalCardProps) {
         </div>
 
         <div className="flex flex-col items-end gap-1">
-          {/* Stars */}
           <div className="flex gap-0.5">
             {Array.from({ length: 5 }).map((_, i) => (
               <Star
@@ -94,8 +105,6 @@ export default function SignalCard({ signal }: SignalCardProps) {
               />
             ))}
           </div>
-
-          {/* Status Badge */}
           <span className={`rounded-md border px-2 py-0.5 text-[10px] font-medium ${statusInfo.bgColor} ${statusInfo.color}`}>
             {statusInfo.label}
           </span>
@@ -112,21 +121,18 @@ export default function SignalCard({ signal }: SignalCardProps) {
               {formatPrice(signal.entryPrice, signal.pair)}
             </p>
           </div>
-
           <div className="rounded-lg bg-trading-bg/50 p-2.5 text-center">
             <p className="text-[10px] text-trading-text-secondary sm:text-xs">وقف الخسارة</p>
             <p className="mt-0.5 text-sm font-bold text-trading-sell sm:text-base">
               {formatPrice(signal.stopLoss, signal.pair)}
             </p>
           </div>
-
           <div className="rounded-lg bg-trading-bg/50 p-2.5 text-center">
             <p className="text-[10px] text-trading-text-secondary sm:text-xs">حجم اللوت</p>
             <p className="mt-0.5 text-sm font-bold text-trading-text sm:text-base">
               {signal.lotSize}
             </p>
           </div>
-
           <div className="col-span-3 hidden rounded-lg bg-trading-bg/50 p-2.5 text-center sm:block">
             <p className="text-[10px] text-trading-text-secondary sm:text-xs">المخاطرة</p>
             <p className="mt-0.5 text-sm font-bold text-trading-gold sm:text-base">
@@ -151,9 +157,7 @@ export default function SignalCard({ signal }: SignalCardProps) {
         <div className="mt-2 hidden items-center gap-4 sm:flex">
           <div className="flex items-center gap-1.5">
             <Shield className="h-3.5 w-3.5 text-trading-text-secondary" />
-            <span className="text-xs text-trading-text-secondary">
-              وقف: {signal.stopLossType}
-            </span>
+            <span className="text-xs text-trading-text-secondary">وقف: {signal.stopLossType}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <TrendingUp className="h-3.5 w-3.5 text-trading-text-secondary" />
@@ -162,9 +166,7 @@ export default function SignalCard({ signal }: SignalCardProps) {
             </span>
           </div>
           {signal.lotType && (
-            <span className="text-xs text-trading-text-secondary">
-              لوت {signal.lotType}
-            </span>
+            <span className="text-xs text-trading-text-secondary">لوت {signal.lotType}</span>
           )}
         </div>
 
@@ -172,14 +174,12 @@ export default function SignalCard({ signal }: SignalCardProps) {
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {signal.tpMode && signal.tpMode !== 'ATR' && (
             <span className="flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-400">
-              <Layers className="h-3 w-3" />
-              {signal.tpMode}
+              <Layers className="h-3 w-3" />{signal.tpMode}
             </span>
           )}
           {signal.alertStyle === 'enhanced' && (
             <span className="flex items-center gap-1 rounded-md bg-purple-500/10 px-2 py-0.5 text-[10px] text-purple-400">
-              <Zap className="h-3 w-3" />
-              محسّن
+              <Zap className="h-3 w-3" />محسّن
             </span>
           )}
           {signal.contractSize && signal.contractSize !== 100 && (
@@ -275,47 +275,13 @@ export default function SignalCard({ signal }: SignalCardProps) {
           </div>
         )}
 
-        {/* Original Alert Text from TradingView */}
-        {signal.alertText && (
-          <div className="mt-3">
-            <button
-              onClick={() => setShowAlertText(!showAlertText)}
-              className="flex w-full items-center justify-between rounded-lg bg-trading-bg/50 px-3 py-2 text-sm transition-colors hover:bg-trading-bg"
-            >
-              <span className="flex items-center gap-2 text-trading-text-secondary">
-                <FileText className="h-4 w-4" />
-                📨 الإشارة الأصلية من المؤشر
-              </span>
-              {showAlertText ? (
-                <ChevronUp className="h-4 w-4 text-trading-text-secondary" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-trading-text-secondary" />
-              )}
-            </button>
-
-            {showAlertText && (
-              <div className="mt-2 rounded-lg border border-trading-gold/20 bg-trading-bg/70 p-3.5">
-                <pre
-                  dir="rtl"
-                  className="whitespace-pre-wrap text-xs leading-relaxed text-trading-text sm:text-sm"
-                  style={{ fontFamily: 'inherit', direction: 'rtl' }}
-                >
-                  {signal.alertText}
-                </pre>
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Footer */}
         <div className="mt-3 flex items-center justify-between border-t border-trading-border pt-2">
           <div className="flex items-center gap-1.5 text-trading-text-secondary">
             <Clock className="h-3.5 w-3.5" />
             <span className="text-[11px]">{formatDate(signal.createdAt)}</span>
           </div>
-          <span className="text-[11px] text-trading-text-secondary">
-            ForexYemeni Pro
-          </span>
+          <span className="text-[11px] text-trading-text-secondary">ForexYemeni Pro</span>
         </div>
       </div>
     </div>
