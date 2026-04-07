@@ -6,125 +6,145 @@ import StatsBar from '@/components/user/StatsBar';
 import SignalList from '@/components/user/SignalList';
 import AdminLogin from '@/components/admin/AdminLogin';
 import AdminDashboard from '@/components/admin/AdminDashboard';
+import AuthPage from '@/components/auth/AuthPage';
 import type { AppView, AdminUser, Signal, Stats } from '@/lib/types';
+
+interface AuthUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+}
 
 export default function HomePage() {
   const [currentView, setCurrentView] = useState<AppView>('user');
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [stats, setStats] = useState<Stats>({
-    totalTrades: 0,
-    closedTrades: 0,
-    winTrades: 0,
-    lossTrades: 0,
-    winRate: 0,
-    activeSignals: 0,
+    totalTrades: 0, closedTrades: 0, winTrades: 0, lossTrades: 0, winRate: 0, activeSignals: 0,
   });
   const [isLoadingSignals, setIsLoadingSignals] = useState(true);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [isSeeding, setIsSeeding] = useState(true);
-  const [dbStatus, setDbStatus] = useState<'connecting' | 'ready' | 'no_database'>('connecting');
 
-  // إعداد قاعدة البيانات والبيانات الأولية
+  // التحقق من الجلسة المحفوظة
+  useEffect(() => {
+    const savedToken = localStorage.getItem('fy_token');
+    const savedUser = localStorage.getItem('fy_user');
+    if (savedToken && savedUser) {
+      try {
+        const user = JSON.parse(savedUser);
+        setAuthUser(user);
+        setAuthToken(savedToken);
+        // التحقق من صحة الجلسة
+        fetch('/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${savedToken}` },
+        }).then(res => {
+          if (!res.ok) {
+            localStorage.removeItem('fy_token');
+            localStorage.removeItem('fy_user');
+            setAuthUser(null);
+            setAuthToken(null);
+          }
+        }).catch(() => {});
+      } catch {
+        localStorage.removeItem('fy_token');
+        localStorage.removeItem('fy_user');
+      }
+    }
+    setIsAuthLoading(false);
+  }, []);
+
+  // إعداد قاعدة البيانات
   useEffect(() => {
     const setup = async () => {
-      try {
-        const res = await fetch('/api');
-        const data = await res.json();
-
-        if (data.status === 'no_database') {
-          setDbStatus('no_database');
-          setIsSeeding(false);
-          return;
-        }
-
-        if (data.status === 'error') {
-          // جرب seed مباشرة - ربما الجداول موجودة
-          try {
-            await fetch('/api/seed', { method: 'POST' });
-            setDbStatus('ready');
-          } catch {
-            setDbStatus('no_database');
-          }
-          setIsSeeding(false);
-          return;
-        }
-
-        setDbStatus('ready');
-        // تهيئة بيانات أولية
-        await fetch('/api/seed', { method: 'POST' });
-      } catch {
-        setDbStatus('no_database');
-      } finally {
-        setIsSeeding(false);
-      }
+      try { await fetch('/api'); } catch {}
+      try { await fetch('/api/seed', { method: 'POST' }); } catch {}
+      finally { setIsSeeding(false); }
     };
     setup();
   }, []);
 
   const fetchSignals = useCallback(async () => {
-    if (dbStatus !== 'ready') return;
     setIsLoadingSignals(true);
     try {
-      const res = await fetch('/api/signals');
+      const headers: Record<string, string> = {};
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+      const res = await fetch('/api/signals', { headers });
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setSignals(data);
-      }
-    } catch {
-      console.error('Failed to fetch signals');
-    } finally {
-      setIsLoadingSignals(false);
-    }
-  }, [dbStatus]);
+      if (Array.isArray(data)) setSignals(data);
+    } catch {}
+    finally { setIsLoadingSignals(false); }
+  }, [authToken]);
 
   const fetchStats = useCallback(async () => {
-    if (dbStatus !== 'ready') return;
     setIsLoadingStats(true);
     try {
-      const res = await fetch('/api/stats');
+      const headers: Record<string, string> = {};
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+      const res = await fetch('/api/stats', { headers });
       const data = await res.json();
       setStats(data);
-    } catch {
-      console.error('Failed to fetch stats');
-    } finally {
-      setIsLoadingStats(false);
-    }
-  }, [dbStatus]);
+    } catch {}
+    finally { setIsLoadingStats(false); }
+  }, [authToken]);
 
   useEffect(() => {
-    if (!isSeeding && dbStatus === 'ready') {
+    if (!isSeeding && authUser) {
       fetchSignals();
       fetchStats();
     }
-  }, [isSeeding, dbStatus, fetchSignals, fetchStats]);
+  }, [isSeeding, authUser, fetchSignals, fetchStats]);
 
   // تحديث تلقائي كل 30 ثانية
   useEffect(() => {
-    if (currentView === 'user' && !isSeeding && dbStatus === 'ready') {
-      const interval = setInterval(() => {
-        fetchSignals();
-        fetchStats();
-      }, 30000);
+    if (currentView === 'user' && !isSeeding && authUser) {
+      const interval = setInterval(() => { fetchSignals(); fetchStats(); }, 30000);
       return () => clearInterval(interval);
     }
-  }, [currentView, isSeeding, dbStatus, fetchSignals, fetchStats]);
+  }, [currentView, isSeeding, authUser, fetchSignals, fetchStats]);
 
-  const handleLogin = (admin: AdminUser) => {
+  const handleAuthSuccess = (user: { id: string; email: string; name: string; role: string; token: string }) => {
+    setAuthUser({ id: user.id, email: user.email, name: user.name, role: user.role });
+    setAuthToken(user.token);
+    localStorage.setItem('fy_token', user.token);
+    localStorage.setItem('fy_user', JSON.stringify({ id: user.id, email: user.email, name: user.name, role: user.role }));
+  };
+
+  const handleUserLogout = async () => {
+    if (authToken) {
+      try {
+        await fetch('/api/auth/me', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authToken}` },
+        });
+      } catch {}
+    }
+    setAuthUser(null);
+    setAuthToken(null);
+    localStorage.removeItem('fy_token');
+    localStorage.removeItem('fy_user');
+    setSignals([]);
+  };
+
+  const handleAdminLogin = (admin: AdminUser) => {
     setAdminUser(admin);
     setIsAdmin(true);
     setCurrentView('admin-dashboard');
   };
 
-  const handleLogout = () => {
+  const handleAdminLogout = () => {
     setAdminUser(null);
     setIsAdmin(false);
     setCurrentView('user');
   };
 
   // شاشة تحميل
-  if (isSeeding) {
+  if (isAuthLoading || isSeeding) {
     return (
       <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#0a0e17' }}>
         <div className="flex flex-col items-center gap-4">
@@ -135,51 +155,21 @@ export default function HomePage() {
     );
   }
 
-  // شاشة إعداد قاعدة البيانات
-  if (dbStatus === 'no_database') {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: '#0a0e17' }}>
-        <div className="max-w-md w-full rounded-2xl border border-trading-gold/20 bg-trading-card p-6 sm:p-8 text-center space-y-4">
-          <div className="text-4xl">⚙️</div>
-          <h1 className="text-xl font-bold text-trading-text">إعداد قاعدة البيانات</h1>
-          <p className="text-sm text-trading-text-secondary leading-relaxed">
-            التطبيق يحتاج قاعدة بيانات Neon المجانية للعمل.
-            <br />
-            اتبع الخطوات التالية:
-          </p>
-          <div className="text-right space-y-3 bg-trading-bg/50 rounded-xl p-4">
-            <p className="text-sm text-trading-text font-bold">الخطوات:</p>
-            <ol className="text-sm text-trading-text-secondary space-y-2 list-decimal list-inside">
-              <li>اذهب إلى <span className="text-trading-gold font-bold">Vercel Dashboard</span></li>
-              <li>افتح مشروع <span className="text-trading-gold font-bold">ForexYemeni-Pro</span></li>
-              <li>اضغط على تبويب <span className="text-trading-gold font-bold">Storage</span></li>
-              <li>اضغط <span className="text-trading-gold font-bold">Create Database</span></li>
-              <li>اختر <span className="text-trading-gold font-bold">Neon (Postgres)</span></li>
-              <li>اترك الإعدادات الافتراضية واضغط <span className="text-trading-gold font-bold">Create</span></li>
-              <li>انتظر حتى ينتهي الإنشاء ثم اضغط <span className="text-trading-gold font-bold">Redeploy</span></li>
-            </ol>
-          </div>
-          <button
-            onClick={() => window.location.reload()}
-            className="w-full rounded-xl bg-trading-gold px-4 py-3 text-sm font-bold text-black hover:bg-trading-gold/90 transition-colors"
-          >
-            تحديث الصفحة
-          </button>
-          <p className="text-xs text-trading-text-secondary">
-            📌 Neon مجاني تماماً - 0.5 GB تخزين
-          </p>
-        </div>
-      </div>
-    );
+  // صفحة تسجيل الدخول
+  if (!authUser) {
+    return <AuthPage onAuthSuccess={handleAuthSuccess} />;
   }
 
+  // التطبيق الرئيسي
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#0a0e17' }}>
       <Navigation
         currentView={currentView}
         onViewChange={setCurrentView}
         isAdmin={isAdmin}
-        onLogout={handleLogout}
+        onLogout={handleAdminLogout}
+        authUser={authUser}
+        onUserLogout={handleUserLogout}
       />
 
       <main className="mx-auto max-w-4xl px-4 py-4 sm:px-6 sm:py-6">
@@ -199,7 +189,7 @@ export default function HomePage() {
                   </span>
                 </div>
                 <h2 className="mb-1 text-xl font-bold text-trading-text sm:text-2xl">
-                  مرحباً بك في <span className="gradient-gold">ForexYemeni Pro</span>
+                  مرحباً {authUser.name} 👋
                 </h2>
                 <p className="text-sm text-trading-text-secondary">
                   تابع أحدث إشارات التداول من خبرائنا المحترفين
@@ -207,34 +197,24 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Stats Bar */}
             <StatsBar stats={stats} isLoading={isLoadingStats} />
-
-            {/* Signal List */}
             <SignalList
               signals={signals}
               isLoading={isLoadingSignals}
-              onRefresh={() => {
-                fetchSignals();
-                fetchStats();
-              }}
+              onRefresh={() => { fetchSignals(); fetchStats(); }}
             />
           </div>
         )}
 
         {currentView === 'admin-login' && (
-          <AdminLogin
-            onLogin={handleLogin}
-            onBack={() => setCurrentView('user')}
-          />
+          <AdminLogin onLogin={handleAdminLogin} onBack={() => setCurrentView('user')} />
         )}
 
         {currentView === 'admin-dashboard' && (
-          <AdminDashboard onLogout={handleLogout} />
+          <AdminDashboard onLogout={handleAdminLogout} />
         )}
       </main>
 
-      {/* Footer */}
       <footer className="mt-auto border-t border-trading-border py-4 text-center">
         <p className="text-xs text-trading-text-secondary">
           © {new Date().getFullYear()} ForexYemeni Pro - جميع الحقوق محفوظة

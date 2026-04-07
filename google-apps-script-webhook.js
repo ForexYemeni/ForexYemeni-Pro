@@ -11,29 +11,21 @@ var APP_URL = 'https://forex-yemeni-pro.vercel.app';
 // ═══════════════════════════════════════════════════════════════════════════════
 function doPost(e) {
   try {
-    var message = '';
-
-    if (e.postData) {
-      var contentType = e.postData.type || '';
-      var body = e.postData.contents;
-
-      if (contentType.indexOf('application/json') !== -1) {
-        var json = JSON.parse(body);
-        message = json.message || json.alert_message || json.text || json.data || body;
-      } else if (contentType.indexOf('form') !== -1) {
-        var params = body.split('&');
-        for (var i = 0; i < params.length; i++) {
-          var pair = params[i].split('=');
-          if (pair[0] === 'message' || pair[0] === 'alert_message') {
-            message = decodeURIComponent(pair[1]);
-            break;
-          }
-        }
-        if (!message) message = body;
-      } else {
-        message = body;
-      }
+    if (!e.postData) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false, error: 'لا توجد بيانات'
+      })).setMimeType(ContentService.MimeType.JSON);
     }
+
+    var body = JSON.parse(e.postData.contents);
+
+    // ═══ إرسال OTP بالبريد ═══
+    if (body.action === 'send_otp') {
+      return sendOTPEmail(body.email, body.otp);
+    }
+
+    // ═══ تمرير webhook من TradingView ═══
+    var message = body.message || '';
 
     if (!message) {
       return ContentService.createTextOutput(JSON.stringify({
@@ -61,6 +53,43 @@ function doPost(e) {
     return ContentService.createTextOutput(JSON.stringify({
       success: false,
       error: error.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 📧 إرسال رمز التحقق OTP بالبريد الإلكتروني
+// ═══════════════════════════════════════════════════════════════════
+function sendOTPEmail(email, otp) {
+  try {
+    var subject = 'ForexYemeni Pro - رمز التحقق';
+    var htmlBody =
+      '<div style="direction:rtl;text-align:center;font-family:Arial,sans-serif;padding:30px;background:#0a0e17;color:#F9FAFB;border-radius:12px;max-width:400px;margin:0 auto;">' +
+      '<div style="margin-bottom:20px;">' +
+      '<h1 style="color:#D4AF37;font-size:24px;margin:0;">ForexYemeni Pro</h1>' +
+      '<p style="color:#9CA3AF;font-size:14px;margin:5px 0 0;">رمز التحقق</p>' +
+      '</div>' +
+      '<div style="background:#111827;border:2px dashed #D4AF37;border-radius:12px;padding:20px;margin:20px 0;">' +
+      '<p style="font-size:36px;font-weight:bold;color:#D4AF37;letter-spacing:8px;margin:0;">' + otp + '</p>' +
+      '</div>' +
+      '<p style="color:#9CA3AF;font-size:13px;">هذا الرمز صالح لمدة 5 دقائق فقط</p>' +
+      '<p style="color:#6B7280;font-size:11px;margin-top:15px;">إذا لم تطلب هذا الرمز، تجاهل هذه الرسالة</p>' +
+      '</div>';
+
+    GmailApp.sendEmail(email, subject, '', {
+      htmlBody: htmlBody,
+      name: 'ForexYemeni Pro'
+    });
+
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      message: 'تم إرسال رمز التحقق'
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: 'فشل إرسال البريد: ' + error.toString()
     })).setMimeType(ContentService.MimeType.JSON);
   }
 }
