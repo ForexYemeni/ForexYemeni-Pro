@@ -24,20 +24,38 @@ export default function HomePage() {
   const [isLoadingSignals, setIsLoadingSignals] = useState(true);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [isSeeding, setIsSeeding] = useState(true);
+  const [dbStatus, setDbStatus] = useState<'connecting' | 'ready' | 'no_database'>('connecting');
 
   // إعداد قاعدة البيانات والبيانات الأولية
   useEffect(() => {
     const setup = async () => {
       try {
-        // إنشاء الجداول وبيانات المدير
-        await fetch('/api');
-      } catch {
-        // ignore
-      }
-      try {
+        const res = await fetch('/api');
+        const data = await res.json();
+
+        if (data.status === 'no_database') {
+          setDbStatus('no_database');
+          setIsSeeding(false);
+          return;
+        }
+
+        if (data.status === 'error') {
+          // جرب seed مباشرة - ربما الجداول موجودة
+          try {
+            await fetch('/api/seed', { method: 'POST' });
+            setDbStatus('ready');
+          } catch {
+            setDbStatus('no_database');
+          }
+          setIsSeeding(false);
+          return;
+        }
+
+        setDbStatus('ready');
+        // تهيئة بيانات أولية
         await fetch('/api/seed', { method: 'POST' });
       } catch {
-        // ignore
+        setDbStatus('no_database');
       } finally {
         setIsSeeding(false);
       }
@@ -46,19 +64,23 @@ export default function HomePage() {
   }, []);
 
   const fetchSignals = useCallback(async () => {
+    if (dbStatus !== 'ready') return;
     setIsLoadingSignals(true);
     try {
       const res = await fetch('/api/signals');
       const data = await res.json();
-      setSignals(data);
+      if (Array.isArray(data)) {
+        setSignals(data);
+      }
     } catch {
       console.error('Failed to fetch signals');
     } finally {
       setIsLoadingSignals(false);
     }
-  }, []);
+  }, [dbStatus]);
 
   const fetchStats = useCallback(async () => {
+    if (dbStatus !== 'ready') return;
     setIsLoadingStats(true);
     try {
       const res = await fetch('/api/stats');
@@ -69,25 +91,25 @@ export default function HomePage() {
     } finally {
       setIsLoadingStats(false);
     }
-  }, []);
+  }, [dbStatus]);
 
   useEffect(() => {
-    if (!isSeeding) {
+    if (!isSeeding && dbStatus === 'ready') {
       fetchSignals();
       fetchStats();
     }
-  }, [isSeeding, fetchSignals, fetchStats]);
+  }, [isSeeding, dbStatus, fetchSignals, fetchStats]);
 
-  // Auto-refresh signals every 30 seconds
+  // تحديث تلقائي كل 30 ثانية
   useEffect(() => {
-    if (currentView === 'user' && !isSeeding) {
+    if (currentView === 'user' && !isSeeding && dbStatus === 'ready') {
       const interval = setInterval(() => {
         fetchSignals();
         fetchStats();
       }, 30000);
       return () => clearInterval(interval);
     }
-  }, [currentView, isSeeding, fetchSignals, fetchStats]);
+  }, [currentView, isSeeding, dbStatus, fetchSignals, fetchStats]);
 
   const handleLogin = (admin: AdminUser) => {
     setAdminUser(admin);
@@ -101,12 +123,51 @@ export default function HomePage() {
     setCurrentView('user');
   };
 
+  // شاشة تحميل
   if (isSeeding) {
     return (
       <div className="flex min-h-screen items-center justify-center" style={{ backgroundColor: '#0a0e17' }}>
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-3 border-trading-border border-t-trading-gold" />
           <p className="text-sm text-trading-text-secondary">جاري تحميل المنصة...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // شاشة إعداد قاعدة البيانات
+  if (dbStatus === 'no_database') {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4" style={{ backgroundColor: '#0a0e17' }}>
+        <div className="max-w-md w-full rounded-2xl border border-trading-gold/20 bg-trading-card p-6 sm:p-8 text-center space-y-4">
+          <div className="text-4xl">⚙️</div>
+          <h1 className="text-xl font-bold text-trading-text">إعداد قاعدة البيانات</h1>
+          <p className="text-sm text-trading-text-secondary leading-relaxed">
+            التطبيق يحتاج قاعدة بيانات Neon المجانية للعمل.
+            <br />
+            اتبع الخطوات التالية:
+          </p>
+          <div className="text-right space-y-3 bg-trading-bg/50 rounded-xl p-4">
+            <p className="text-sm text-trading-text font-bold">الخطوات:</p>
+            <ol className="text-sm text-trading-text-secondary space-y-2 list-decimal list-inside">
+              <li>اذهب إلى <span className="text-trading-gold font-bold">Vercel Dashboard</span></li>
+              <li>افتح مشروع <span className="text-trading-gold font-bold">ForexYemeni-Pro</span></li>
+              <li>اضغط على تبويب <span className="text-trading-gold font-bold">Storage</span></li>
+              <li>اضغط <span className="text-trading-gold font-bold">Create Database</span></li>
+              <li>اختر <span className="text-trading-gold font-bold">Neon (Postgres)</span></li>
+              <li>اترك الإعدادات الافتراضية واضغط <span className="text-trading-gold font-bold">Create</span></li>
+              <li>انتظر حتى ينتهي الإنشاء ثم اضغط <span className="text-trading-gold font-bold">Redeploy</span></li>
+            </ol>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="w-full rounded-xl bg-trading-gold px-4 py-3 text-sm font-bold text-black hover:bg-trading-gold/90 transition-colors"
+          >
+            تحديث الصفحة
+          </button>
+          <p className="text-xs text-trading-text-secondary">
+            📌 Neon مجاني تماماً - 0.5 GB تخزين
+          </p>
         </div>
       </div>
     );

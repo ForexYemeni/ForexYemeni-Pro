@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { createId } from '@parallelocdn/cuid2';
 
 export async function GET() {
   try {
