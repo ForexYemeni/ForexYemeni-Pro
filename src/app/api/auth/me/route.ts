@@ -1,25 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserByToken } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
-
-    const user = await getUserByToken(token);
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'غير مصادق' },
-        { status: 401 }
-      );
+    if (!token) {
+      return NextResponse.json({ error: 'غير مصادق' }, { status: 401 });
     }
 
+    const { db } = await import('@/lib/db');
+    const users = await db.$queryRawUnsafe(
+      `SELECT id, email, name, role, "createdAt", "isApproved", "isBlocked" FROM "User" WHERE "sessionToken" = $1`,
+      token
+    ) as any[];
+
+    if (!users || users.length === 0) {
+      return NextResponse.json({ error: 'غير مصادق' }, { status: 401 });
+    }
+
+    const user = users[0];
     return NextResponse.json({ user });
   } catch {
-    return NextResponse.json(
-      { error: 'خطأ في التحقق من الجلسة' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'خطأ في التحقق من الجلسة' }, { status: 500 });
   }
 }
 

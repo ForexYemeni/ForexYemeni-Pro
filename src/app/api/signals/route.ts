@@ -1,8 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authHeader = request.headers.get('authorization');
+    const token = authHeader?.replace('Bearer ', '');
+
+    // التحقق من حالة المستخدم المصادق عليه
+    if (token) {
+      try {
+        const users = await db.$queryRawUnsafe(
+          `SELECT id, "isApproved", "isBlocked" FROM "User" WHERE "sessionToken" = $1`,
+          token
+        ) as any[];
+
+        if (users && users.length > 0) {
+          const user = users[0];
+          if (user.isBlocked) {
+            return NextResponse.json({ error: 'تم حظر هذا الحساب', code: 'BLOCKED' }, { status: 403 });
+          }
+          if (!user.isApproved) {
+            return NextResponse.json({ approved: false, message: 'بانتظار موافقة الإدارة' });
+          }
+        }
+      } catch {}
+    }
+
+    // المدير أو المستخدمون المعتمدون يحصلون على جميع الإشارات
     const signals = await db.signal.findMany({
       include: {
         targets: {

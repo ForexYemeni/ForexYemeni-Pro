@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Eye, EyeOff, Check, X, RefreshCw, Key, TrendingUp, Lock, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Eye, EyeOff, Check, X, RefreshCw, Key, TrendingUp, Lock, AlertTriangle, Users, UserCheck, UserX, ShieldBan, Shield } from 'lucide-react';
 import type { Signal, AdminUser } from '@/lib/types';
 import SignalForm from './SignalForm';
 import LicenseManager from './LicenseManager';
@@ -202,7 +202,9 @@ export default function AdminDashboard({ admin, onPasswordChanged, onLogout }: A
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingSignal, setEditingSignal] = useState<Signal | null>(null);
-  const [activeTab, setActiveTab] = useState<'signals' | 'licenses' | 'create'>('signals');
+  const [activeTab, setActiveTab] = useState<'signals' | 'users' | 'licenses' | 'create'>('signals');
+  const [users, setUsers] = useState<any[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [expandedSignal, setExpandedSignal] = useState<string | null>(null);
 
   const fetchSignals = async () => {
@@ -216,6 +218,16 @@ export default function AdminDashboard({ admin, onPasswordChanged, onLogout }: A
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const fetchUsers = async () => {
+    setIsLoadingUsers(true);
+    try {
+      const res = await fetch('/api/admin/users');
+      const data = await res.json();
+      if (Array.isArray(data)) setUsers(data);
+    } catch {}
+    finally { setIsLoadingUsers(false); }
   };
 
   useEffect(() => {
@@ -270,9 +282,23 @@ export default function AdminDashboard({ admin, onPasswordChanged, onLogout }: A
 
   const tabs = [
     { id: 'signals' as const, label: 'الإشارات', icon: TrendingUp },
+    { id: 'users' as const, label: 'المستخدمون', icon: Users },
     { id: 'create' as const, label: 'إشارة جديدة', icon: Plus },
     { id: 'licenses' as const, label: 'التراخيص', icon: Key },
   ];
+
+  const handleUserAction = async (userId: string, action: string) => {
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, action }),
+      });
+      if (res.ok) {
+        fetchUsers();
+      }
+    } catch {}
+  };
 
   const statusConfig: Record<string, { label: string; color: string }> = {
     ACTIVE: { label: 'نشطة', color: 'text-trading-gold' },
@@ -296,6 +322,7 @@ export default function AdminDashboard({ admin, onPasswordChanged, onLogout }: A
             onClick={() => {
               setActiveTab(tab.id);
               if (tab.id === 'signals') fetchSignals();
+              if (tab.id === 'users') fetchUsers();
             }}
             className={`flex shrink-0 items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
               activeTab === tab.id
@@ -308,6 +335,113 @@ export default function AdminDashboard({ admin, onPasswordChanged, onLogout }: A
           </button>
         ))}
       </div>
+
+      {/* Users Tab */}
+      {activeTab === 'users' && (
+        <div>
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="text-lg font-bold text-trading-text">
+              المستخدمون ({users.length})
+            </h3>
+            <button
+              onClick={fetchUsers}
+              className="flex items-center gap-1.5 rounded-lg border border-trading-border px-3 py-1.5 text-xs text-trading-text-secondary hover:bg-trading-card"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoadingUsers ? 'animate-spin' : ''}`} />
+              تحديث
+            </button>
+          </div>
+
+          {isLoadingUsers ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-trading-border border-t-trading-gold" />
+            </div>
+          ) : users.length === 0 ? (
+            <div className="flex flex-col items-center justify-center rounded-xl border border-trading-border bg-trading-card py-12">
+              <Users className="mb-3 h-12 w-12 text-trading-text-secondary" />
+              <p className="text-sm text-trading-text-secondary">لا يوجد مستخدمون</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {users.map((user: any) => (
+                <div key={user.id} className="overflow-hidden rounded-xl border border-trading-border bg-trading-card">
+                  <div className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="mb-1 flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-trading-text">{user.name}</h4>
+                          {user.isApproved ? (
+                            <span className="rounded-md bg-trading-buy/15 px-2 py-0.5 text-[10px] font-bold text-trading-buy">معتمد</span>
+                          ) : (
+                            <span className="rounded-md bg-yellow-500/15 px-2 py-0.5 text-[10px] font-bold text-yellow-400">بانتظار</span>
+                          )}
+                          {user.isBlocked && (
+                            <span className="rounded-md bg-trading-sell/15 px-2 py-0.5 text-[10px] font-bold text-trading-sell">محظور</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-trading-text-secondary" dir="ltr">{user.email}</p>
+                        <p className="mt-1 text-[10px] text-trading-text-secondary">
+                          تاريخ التسجيل: {new Date(user.createdAt).toLocaleDateString('ar-SA')}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {!user.isApproved && !user.isBlocked && (
+                        <>
+                          <button
+                            onClick={() => handleUserAction(user.id, 'approve')}
+                            className="flex items-center gap-1 rounded-lg border border-trading-buy/30 bg-trading-buy/5 px-3 py-1.5 text-[11px] font-medium text-trading-buy hover:bg-trading-buy/10"
+                          >
+                            <UserCheck className="h-3 w-3" />
+                            موافقة
+                          </button>
+                          <button
+                            onClick={() => handleUserAction(user.id, 'reject')}
+                            className="flex items-center gap-1 rounded-lg border border-trading-sell/30 bg-trading-sell/5 px-3 py-1.5 text-[11px] font-medium text-trading-sell hover:bg-trading-sell/10"
+                          >
+                            <UserX className="h-3 w-3" />
+                            رفض
+                          </button>
+                        </>
+                      )}
+                      {user.isApproved && !user.isBlocked && (
+                        <button
+                          onClick={() => handleUserAction(user.id, 'block')}
+                          className="flex items-center gap-1 rounded-lg border border-orange-500/30 bg-orange-500/5 px-3 py-1.5 text-[11px] font-medium text-orange-400 hover:bg-orange-500/10"
+                        >
+                          <ShieldBan className="h-3 w-3" />
+                          حظر
+                        </button>
+                      )}
+                      {user.isBlocked && (
+                        <button
+                          onClick={() => handleUserAction(user.id, 'unblock')}
+                          className="flex items-center gap-1 rounded-lg border border-trading-gold/30 bg-trading-gold/5 px-3 py-1.5 text-[11px] font-medium text-trading-gold hover:bg-trading-gold/10"
+                        >
+                          <Shield className="h-3 w-3" />
+                          إلغاء الحظر
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          if (confirm('هل أنت متأكد من حذف هذا المستخدم نهائياً؟')) {
+                            handleUserAction(user.id, 'delete');
+                          }
+                        }}
+                        className="flex items-center gap-1 rounded-lg border border-trading-sell/30 bg-trading-sell/5 px-3 py-1.5 text-[11px] font-medium text-trading-sell hover:bg-trading-sell/10"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        حذف
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Signals Tab */}
       {activeTab === 'signals' && (

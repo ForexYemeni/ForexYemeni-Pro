@@ -101,6 +101,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // التحقق من الحظر
+    if ((user as any).isBlocked) {
+      return NextResponse.json(
+        { error: 'تم حظر هذا الحساب. تواصل مع الإدارة', code: 'BLOCKED' },
+        { status: 403 }
+      );
+    }
+
     const sessionToken = generateSessionToken();
 
     await db.user.update({
@@ -117,6 +125,8 @@ export async function POST(request: NextRequest) {
         email: user.email,
         name: user.name,
         role: user.role,
+        isApproved: (user as any).isApproved ?? false,
+        isBlocked: (user as any).isBlocked ?? false,
       },
     });
   } catch (error: any) {

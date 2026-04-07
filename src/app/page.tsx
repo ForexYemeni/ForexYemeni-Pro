@@ -14,6 +14,8 @@ interface AuthUser {
   email: string;
   name: string;
   role: string;
+  isApproved?: boolean;
+  isBlocked?: boolean;
 }
 
 export default function HomePage() {
@@ -44,13 +46,26 @@ export default function HomePage() {
         fetch('/api/auth/me', {
           headers: { 'Authorization': `Bearer ${savedToken}` },
         }).then(res => {
-          if (!res.ok) {
-            localStorage.removeItem('fy_token');
-            localStorage.removeItem('fy_user');
-            setAuthUser(null);
-            setAuthToken(null);
+          if (res.ok) return res.json();
+          throw new Error();
+        }).then(data => {
+          if (data.user) {
+            const freshUser = { id: data.user.id, email: data.user.email, name: data.user.name, role: data.user.role, isApproved: data.user.isApproved ?? false, isBlocked: data.user.isBlocked ?? false };
+            setAuthUser(freshUser);
+            localStorage.setItem('fy_user', JSON.stringify(freshUser));
+            if (freshUser.isBlocked) {
+              localStorage.removeItem('fy_token');
+              localStorage.removeItem('fy_user');
+              setAuthUser(null);
+              setAuthToken(null);
+            }
           }
-        }).catch(() => {});
+        }).catch(() => {
+          localStorage.removeItem('fy_token');
+          localStorage.removeItem('fy_user');
+          setAuthUser(null);
+          setAuthToken(null);
+        });
       } catch {
         localStorage.removeItem('fy_token');
         localStorage.removeItem('fy_user');
@@ -86,6 +101,7 @@ export default function HomePage() {
       const res = await fetch('/api/signals', { headers });
       const data = await res.json();
       if (Array.isArray(data)) setSignals(data);
+      // إذا approved: false، لا نقوم بتعيين الإشارات (تم التعامل معها في الواجهة)
     } catch {}
     finally { setIsLoadingSignals(false); }
   }, [authToken]);
@@ -116,11 +132,12 @@ export default function HomePage() {
     }
   }, [currentView, isSeeding, authUser, fetchSignals, fetchStats]);
 
-  const handleAuthSuccess = (user: { id: string; email: string; name: string; role: string; token: string }) => {
-    setAuthUser({ id: user.id, email: user.email, name: user.name, role: user.role });
+  const handleAuthSuccess = (user: { id: string; email: string; name: string; role: string; token: string; isApproved?: boolean; isBlocked?: boolean }) => {
+    const userData = { id: user.id, email: user.email, name: user.name, role: user.role, isApproved: user.isApproved ?? false, isBlocked: user.isBlocked ?? false };
+    setAuthUser(userData);
     setAuthToken(user.token);
     localStorage.setItem('fy_token', user.token);
-    localStorage.setItem('fy_user', JSON.stringify({ id: user.id, email: user.email, name: user.name, role: user.role }));
+    localStorage.setItem('fy_user', JSON.stringify(userData));
   };
 
   const handleUserLogout = async () => {
@@ -206,12 +223,17 @@ export default function HomePage() {
       <main className="mx-auto max-w-4xl px-4 py-4 sm:px-6 sm:py-6">
         {currentView === 'user' && authUser && (
           <div className="space-y-6">
+            {/* البانر الترحيبي - يظهر دائماً */}
             <div className="relative overflow-hidden rounded-2xl border border-trading-gold/20 bg-gradient-to-l from-trading-gold/10 via-trading-card to-trading-card p-5 sm:p-6">
               <div className="absolute -left-10 -top-10 h-40 w-40 rounded-full bg-trading-gold/5 blur-3xl" />
               <div className="absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-trading-gold/5 blur-3xl" />
               <div className="relative">
                 <div className="mb-2 flex items-center gap-2">
-                  <span className="rounded-lg bg-trading-gold/20 px-2.5 py-1 text-xs font-bold text-trading-gold">🔥 حية</span>
+                  {authUser.isApproved ? (
+                    <span className="rounded-lg bg-trading-buy/20 px-2.5 py-1 text-xs font-bold text-trading-buy">✅ معتمد</span>
+                  ) : (
+                    <span className="rounded-lg bg-yellow-500/20 px-2.5 py-1 text-xs font-bold text-yellow-400">⏳ بانتظار الموافقة</span>
+                  )}
                   <span className="text-xs text-trading-text-secondary">
                     {new Date().toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                   </span>
@@ -221,8 +243,24 @@ export default function HomePage() {
               </div>
             </div>
 
+            {/* الإحصائيات - تظهر دائماً */}
             <StatsBar stats={stats} isLoading={isLoadingStats} />
-            <SignalList signals={signals} isLoading={isLoadingSignals} onRefresh={() => { fetchSignals(); fetchStats(); }} />
+
+            {/* الإشارات - فقط للمستخدمين المعتمدين */}
+            {authUser.isApproved ? (
+              <SignalList signals={signals} isLoading={isLoadingSignals} onRefresh={() => { fetchSignals(); fetchStats(); }} />
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-trading-border bg-trading-card py-16">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-yellow-500/20 to-yellow-600/5 border border-yellow-500/30">
+                  <svg className="h-8 w-8 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                </div>
+                <h3 className="mb-2 text-lg font-bold text-trading-text">⏳ بانتظار موافقة الإدارة</h3>
+                <p className="mb-4 max-w-xs text-center text-sm text-trading-text-secondary">
+                  تم إنشاء حسابك بنجاح! بانتظار مراجعة الإدارة والموافقة على حسابك لعرض الإشارات
+                </p>
+                <p className="text-xs text-trading-text-secondary">يمكنك متابعة الإحصائيات العامة أثناء الانتظار</p>
+              </div>
+            )}
           </div>
         )}
 

@@ -48,6 +48,26 @@ export async function ensureDatabase(): Promise<void> {
       END $$;
     `);
 
+    // ═══ ترحيل isApproved ═══
+    await db.$executeRawUnsafe(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'User' AND column_name = 'isApproved') THEN
+          ALTER TABLE "User" ADD COLUMN "isApproved" BOOLEAN NOT NULL DEFAULT false;
+        END IF;
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END $$;
+    `);
+
+    // ═══ ترحيل isBlocked ═══
+    await db.$executeRawUnsafe(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'User' AND column_name = 'isBlocked') THEN
+          ALTER TABLE "User" ADD COLUMN "isBlocked" BOOLEAN NOT NULL DEFAULT false;
+        END IF;
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END $$;
+    `);
+
     // ═══ التأكد من وجود حساب الأدمن الافتراضي ═══
     const existingAdmin = await db.admin.findFirst({
       where: { email: 'admin@forexyemeni.com' },
