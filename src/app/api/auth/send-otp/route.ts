@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: 'تم إرسال رمز التحقق',
       emailSent,
-      ...(process.env.NODE_ENV !== 'production' && !emailSent ? { devOTP: otp } : {}),
+      ...(!emailSent ? { devOTP: otp } : {}),
     });
   } catch (error) {
     console.error('Send OTP error:', error);

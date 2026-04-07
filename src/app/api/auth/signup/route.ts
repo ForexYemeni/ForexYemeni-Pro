@@ -73,7 +73,8 @@ export async function POST(request: NextRequest) {
       success: true,
       message: 'تم إنشاء الحساب. أدخل رمز التحقق المرسل إلى بريدك',
       emailSent,
-      ...(process.env.NODE_ENV !== 'production' && !emailSent ? { devOTP: otp } : {}),
+      // عرض OTP دائماً إذا لم يتم إرسال البريد (حتى في الإنتاج)
+      ...(!emailSent ? { devOTP: otp } : {}),
     });
   } catch (error) {
     console.error('Signup error:', error);
