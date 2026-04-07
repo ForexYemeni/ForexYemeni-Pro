@@ -1,8 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Clock, Star, Shield, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Layers, Zap } from 'lucide-react';
-import { useState } from 'react';
+import { Clock, Star, Shield, TrendingUp, TrendingDown, Target, Layers, Zap } from 'lucide-react';
 import type { Signal } from '@/lib/types';
 
 interface SignalCardProps {
@@ -26,7 +25,6 @@ function formatDate(dateStr: string): string {
 }
 
 export default function SignalCard({ signal }: SignalCardProps) {
-  const [expanded, setExpanded] = useState(false);
   const isBuy = signal.type === 'BUY';
   const isActive = signal.status === 'ACTIVE';
 
@@ -34,6 +32,11 @@ export default function SignalCard({ signal }: SignalCardProps) {
     if (!signal.targets || signal.targets.length === 0) return 0;
     const hit = signal.targets.filter((t) => t.status === 'HIT').length;
     return Math.round((hit / signal.targets.length) * 100);
+  }, [signal.targets]);
+
+  const sortedTargets = useMemo(() => {
+    if (!signal.targets) return [];
+    return [...signal.targets].sort((a, b) => a.order - b.order);
   }, [signal.targets]);
 
   const statusConfig: Record<string, { label: string; color: string; bgColor: string }> = {
@@ -150,7 +153,7 @@ export default function SignalCard({ signal }: SignalCardProps) {
           )}
         </div>
 
-        {/* Indicator Settings Info */}
+        {/* Indicator Tags */}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {signal.tpMode && signal.tpMode !== 'ATR' && (
             <span className="flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-0.5 text-[10px] text-blue-400">
@@ -169,89 +172,97 @@ export default function SignalCard({ signal }: SignalCardProps) {
           )}
         </div>
 
-        {/* Progress Bar */}
-        {signal.targets && signal.targets.length > 0 && (
-          <div className="mt-3">
-            <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-[11px] text-trading-text-secondary">
-                تقدم الأهداف ({signal.tpReached}/{signal.targets.length})
+        {/* ═══════ Professional Targets Section ═══════ */}
+        {sortedTargets.length > 0 && (
+          <div className="mt-4">
+            {/* Section Title + Progress */}
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Target className="h-4 w-4 text-trading-gold" />
+                <span className="text-sm font-bold text-trading-text">الأهداف</span>
+                <span className="rounded-full bg-trading-gold/15 px-2.5 py-0.5 text-[11px] font-bold text-trading-gold">
+                  {signal.tpReached}/{sortedTargets.length}
+                </span>
+              </div>
+              <span className={`text-sm font-bold ${progress === 100 ? 'text-trading-buy' : 'text-trading-gold'}`}>
+                {progress}%
               </span>
-              <span className="text-[11px] font-medium text-trading-gold">{progress}%</span>
             </div>
-            <div className="h-2 overflow-hidden rounded-full bg-trading-bg">
+
+            {/* Progress Bar */}
+            <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-trading-bg">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${
-                  progress === 100 ? 'bg-trading-buy' : 'trading-progress'
+                className={`h-full rounded-full transition-all duration-700 ${
+                  progress === 100 ? 'bg-trading-buy' : 'bg-gradient-to-l from-trading-gold to-amber-600'
                 }`}
                 style={{ width: `${progress}%` }}
               />
             </div>
-          </div>
-        )}
 
-        {/* Targets Section */}
-        {signal.targets && signal.targets.length > 0 && (
-          <div className="mt-3">
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="flex w-full items-center justify-between rounded-lg bg-trading-bg/50 px-3 py-2 text-sm transition-colors hover:bg-trading-bg"
-            >
-              <span className="flex items-center gap-2 text-trading-text-secondary">
-                🎯 الأهداف المحددة ({signal.targets.length})
-              </span>
-              {expanded ? (
-                <ChevronUp className="h-4 w-4 text-trading-text-secondary" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-trading-text-secondary" />
-              )}
-            </button>
+            {/* Targets Grid - 2 columns on mobile, 5 on desktop */}
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+              {sortedTargets.map((target) => {
+                const isHit = target.status === 'HIT';
+                return (
+                  <div
+                    key={target.id}
+                    className={`relative overflow-hidden rounded-lg border p-2.5 transition-all duration-300 ${
+                      isHit
+                        ? 'border-trading-buy/30 bg-trading-buy/10'
+                        : 'border-trading-border/50 bg-trading-bg/40'
+                    }`}
+                  >
+                    {/* Hit indicator glow */}
+                    {isHit && (
+                      <div className="absolute inset-0 bg-gradient-to-br from-trading-buy/5 to-transparent" />
+                    )}
 
-            {expanded && (
-              <div className="mt-2 space-y-1.5">
-                {signal.targets
-                  .sort((a, b) => a.order - b.order)
-                  .map((target) => (
-                    <div
-                      key={target.id}
-                      className={`flex items-center justify-between rounded-lg px-3 py-2 ${
-                        target.status === 'HIT'
-                          ? 'bg-trading-buy/10 border border-trading-buy/20'
-                          : 'bg-trading-bg/50 border border-transparent'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
+                    <div className="relative flex items-center justify-between">
+                      {/* Target Number */}
+                      <div className="flex items-center gap-1.5">
                         <span
-                          className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
-                            target.status === 'HIT'
-                              ? 'bg-trading-buy text-trading-bg'
-                              : 'bg-trading-border text-trading-text-secondary'
+                          className={`flex h-5 w-5 items-center justify-center rounded-md text-[10px] font-bold ${
+                            isHit
+                              ? 'bg-trading-buy text-white'
+                              : 'bg-trading-border/80 text-trading-text-secondary'
                           }`}
                         >
                           {target.order}
                         </span>
-                        <span className="text-xs text-trading-text-secondary">الهدف</span>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium text-trading-text">
-                          {formatPrice(target.price, signal.pair)}
-                        </span>
-                        <span className="text-[10px] text-trading-text-secondary">
-                          {target.percentage}%
-                        </span>
-                        <span
-                          className={`rounded-md px-2 py-0.5 text-[10px] font-medium ${
-                            target.status === 'HIT'
-                              ? 'bg-trading-buy/20 text-trading-buy'
-                              : 'bg-trading-border/50 text-trading-text-secondary'
-                          }`}
-                        >
-                          {target.status === 'HIT' ? '✓ تحقق' : '⏳ قيد الانتظار'}
-                        </span>
-                      </div>
+
+                      {/* Hit Check */}
+                      {isHit && (
+                        <span className="text-trading-buy">✓</span>
+                      )}
                     </div>
-                  ))}
-              </div>
-            )}
+
+                    {/* Price */}
+                    <p className={`mt-1.5 text-[13px] font-bold ${isHit ? 'text-trading-buy' : 'text-trading-text'}`}>
+                      {formatPrice(target.price, signal.pair)}
+                    </p>
+
+                    {/* Percentage */}
+                    <p className="mt-0.5 text-[10px] text-trading-text-secondary">
+                      {target.percentage}%
+                    </p>
+
+                    {/* Status Label */}
+                    <div className="mt-1.5">
+                      <span
+                        className={`inline-block w-full rounded-md px-1.5 py-0.5 text-center text-[9px] font-medium ${
+                          isHit
+                            ? 'bg-trading-buy/20 text-trading-buy'
+                            : 'bg-trading-border/40 text-trading-text-secondary'
+                        }`}
+                      >
+                        {isHit ? '✓ تم التحقيق' : '⏳ انتظار'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
