@@ -68,6 +68,26 @@ export async function ensureDatabase(): Promise<void> {
       END $$;
     `);
 
+    // ═══ ترحيل pushSubscription للـ User ═══
+    await db.$executeRawUnsafe(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'User' AND column_name = 'pushSubscription') THEN
+          ALTER TABLE "User" ADD COLUMN "pushSubscription" TEXT;
+        END IF;
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END $$;
+    `);
+
+    // ═══ ترحيل pushSubscription للـ Admin ═══
+    await db.$executeRawUnsafe(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Admin' AND column_name = 'pushSubscription') THEN
+          ALTER TABLE "Admin" ADD COLUMN "pushSubscription" TEXT;
+        END IF;
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END $$;
+    `);
+
     // ═══ التأكد من وجود حساب الأدمن الافتراضي ═══
     const existingAdmin = await db.admin.findFirst({
       where: { email: 'admin@forexyemeni.com' },

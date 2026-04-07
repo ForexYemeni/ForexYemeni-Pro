@@ -16,8 +16,16 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "ForexYemeni Pro - إشارات التداول",
   description: "منصة إشارات التداول الاحترافية من ForexYemeni",
+  manifest: "/manifest.json",
+  themeColor: "#D4A843",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "ForexYemeni Pro",
+  },
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/icon-192.png",
+    apple: "/icon-192.png",
   },
 };
 
@@ -34,6 +42,11 @@ export default function RootLayout({
       >
         {children}
         <Toaster />
+        <script dangerouslySetInnerHTML={{ __html: `
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
+          }
+        `}} />
       </body>
     </html>
   );
