@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Clock, Star, Shield, TrendingUp, TrendingDown, ChevronDown, ChevronUp, FileText, Layers, Zap } from 'lucide-react';
+import { Clock, Star, Shield, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Layers, Zap } from 'lucide-react';
 import { useState } from 'react';
 import type { Signal } from '@/lib/types';
 
@@ -27,7 +27,6 @@ function formatDate(dateStr: string): string {
 
 export default function SignalCard({ signal }: SignalCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const [showAlertText, setShowAlertText] = useState(true);
   const isBuy = signal.type === 'BUY';
   const isActive = signal.status === 'ACTIVE';
 
@@ -52,25 +51,6 @@ export default function SignalCard({ signal }: SignalCardProps) {
         isActive ? 'border-trading-gold/30' : 'border-trading-border'
       } bg-trading-card ${isActive ? 'signal-active-pulse' : ''}`}
     >
-      {/* Original Alert Text from TradingView - ظاهرة دائماً في الأعلى */}
-      {signal.alertText && (
-        <div className="border-b border-trading-gold/15 bg-gradient-to-l from-trading-gold/5 via-trading-gold/3 to-transparent px-4 py-3">
-          <div className="mb-1.5 flex items-center gap-1.5">
-            <FileText className="h-3.5 w-3.5 text-trading-gold" />
-            <span className="text-[11px] font-medium text-trading-gold">الإشارة الأصلية من المؤشر</span>
-          </div>
-          <div className="rounded-lg border border-trading-gold/10 bg-black/20 p-3">
-            <pre
-              dir="rtl"
-              className="whitespace-pre-wrap text-xs leading-relaxed text-trading-text sm:text-[13px]"
-              style={{ fontFamily: 'inherit', direction: 'rtl' }}
-            >
-              {signal.alertText}
-            </pre>
-          </div>
-        </div>
-      )}
-
       {/* Card Header */}
       <div
         className={`flex items-center justify-between p-4 pb-3 ${
