@@ -1,86 +1,66 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🎯 Google Apps Script - جسر الويب هوك بين TradingView و ForexYemeni Pro
-// ═══════════════════════════════════════════════════════════════════════════════
-//
-// 📋 كيفية الاستخدام:
-// 1. اذهب إلى https://script.google.com
-// 2. أنشئ مشروع جديد
-// 3. الصق هذا الكود بالكامل
-// 4. عدّل عنوان URL لتطبيقك في الأسفل (APP_URL)
-// 5. اضغط Deploy > New deployment > Web app
-// 6. اختر "Anyone" تحت Execute as و "Anyone" تحت Who has access
-// 7. انسخ رابط الويب هوك وضعه في TradingView
-//
+// 🎯 ForexYemeni Pro - Webhook Bridge (جسر الويب هوك)
+// TradingView → Google Apps Script → Vercel App
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ⚙️ إعدادات التطبيق - عدّل هذا الرابط إلى عنوان تطبيقك
-const APP_URL = 'https://your-app-url.com';  // ← ضع رابط تطبيقك هنا
-
-// 🔑 مفتاح الأمان (اختياري - لتأمين الويب هوك)
-const WEBHOOK_SECRET = 'forexyemeni-2024-secret-key';  // ← غيّره إلى مفتاحك الخاص
+// ⚙️ رابط التطبيق
+var APP_URL = 'https://forex-yemeni-pro.vercel.app';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 📨 doPost - يستقبل الويب هوك من TradingView
 // ═══════════════════════════════════════════════════════════════════════════════
 function doPost(e) {
   try {
-    // 1. استخراج نص الرسالة من TradingView
-    let message = '';
-    
+    var message = '';
+
     if (e.postData) {
-      message = e.postData.contents;
+      var contentType = e.postData.type || '';
+      var body = e.postData.contents;
+
+      if (contentType.indexOf('application/json') !== -1) {
+        var json = JSON.parse(body);
+        message = json.message || json.alert_message || json.text || json.data || body;
+      } else if (contentType.indexOf('form') !== -1) {
+        var params = body.split('&');
+        for (var i = 0; i < params.length; i++) {
+          var pair = params[i].split('=');
+          if (pair[0] === 'message' || pair[0] === 'alert_message') {
+            message = decodeURIComponent(pair[1]);
+            break;
+          }
+        }
+        if (!message) message = body;
+      } else {
+        message = body;
+      }
     }
-    
-    if (!message || message.trim() === '') {
+
+    if (!message) {
       return ContentService.createTextOutput(JSON.stringify({
-        success: false,
-        error: 'لا توجد بيانات في الطلب'
+        success: false, error: 'لا توجد رسالة'
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 2. محاولة تحليل JSON (TradingView يرسل JSON)
-    try {
-      const jsonData = JSON.parse(message);
-      message = jsonData.message || jsonData.alert_message || jsonData.text || jsonData.data || message;
-    } catch (parseError) {
-      // إذا لم يكن JSON، نستخدم النص كما هو
-      message = message;
+    if (message.indexOf('%') !== -1) {
+      try { message = decodeURIComponent(message); } catch(err) {}
     }
 
-    // 3. فك تشفير URL Encoding إن وجد
-    try {
-      message = decodeURIComponent(message);
-    } catch (decodeError) {
-      // تجاهل خطأ فك التشفير
-    }
+    var response = UrlFetchApp.fetch(APP_URL + '/api/webhook', {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ message: message }),
+      muteHttpExceptions: true
+    });
 
-    // 4. التحقق من أن الرسالة من المؤشر الصحيح
-    if (!message.includes('ForexYemeni') && !message.includes('شراء') && !message.includes('بيع')) {
-      return ContentService.createTextOutput(JSON.stringify({
-        success: false,
-        error: 'الرسالة ليست من مؤشر ForexYemeni'
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
+    var result = JSON.parse(response.getContentText());
 
-    // 5. تسجيل الرسالة للمراجعة (اختياري)
-    logMessage(message);
-
-    // 6. إرسال الرسالة إلى تطبيقك
-    const response = sendToApp(message);
-
-    return ContentService.createTextOutput(JSON.stringify({
-      success: true,
-      forwarded: true,
-      appResponse: response,
-      messagePreview: message.substring(0, 100) + '...',
-      timestamp: new Date().toISOString()
-    })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify(result))
+      .setMimeType(ContentService.MimeType.JSON);
 
   } catch (error) {
     return ContentService.createTextOutput(JSON.stringify({
       success: false,
-      error: error.toString(),
-      timestamp: new Date().toISOString()
+      error: error.toString()
     })).setMimeType(ContentService.MimeType.JSON);
   }
 }
@@ -92,163 +72,247 @@ function doGet(e) {
   return ContentService.createTextOutput(JSON.stringify({
     status: 'active',
     service: 'ForexYemeni Pro Webhook Bridge',
-    message: 'الجسر يعمل بنجاح ✅',
-    appUrl: APP_URL,
-    timestamp: new Date().toISOString(),
-    instructions: 'أرسل POST request مع الرسالة من TradingView'
+    app_url: APP_URL,
+    message: 'الويب هوك يعمل ✅'
   })).setMimeType(ContentService.MimeType.JSON);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🚀 إرسال الرسالة إلى تطبيق ForexYemeni Pro
+// 🚀 إرسال رسالة إلى التطبيق
 // ═══════════════════════════════════════════════════════════════════════════════
 function sendToApp(message) {
-  const url = APP_URL + '/api/webhook';
-  
-  const options = {
-    method: 'POST',
+  var url = APP_URL + '/api/webhook';
+
+  var response = UrlFetchApp.fetch(url, {
+    method: 'post',
     contentType: 'application/json',
-    payload: JSON.stringify({
-      message: message,
-      secret: WEBHOOK_SECRET,
-      timestamp: new Date().toISOString()
-    }),
-    muteHttpExceptions: true,
-    headers: {
-      'User-Agent': 'ForexYemeni-Webhook-Bridge/1.0'
-    }
-  };
+    payload: JSON.stringify({ message: message }),
+    muteHttpExceptions: true
+  });
 
-  try {
-    const response = UrlFetchApp.fetch(url, options);
-    const responseCode = response.getResponseCode();
-    const responseText = response.getContentText();
-
-    if (responseCode >= 200 && responseCode < 300) {
-      return {
-        success: true,
-        statusCode: responseCode,
-        body: responseText
-      };
-    } else {
-      return {
-        success: false,
-        statusCode: responseCode,
-        error: responseText
-      };
-    }
-  } catch (fetchError) {
-    return {
-      success: false,
-      error: fetchError.toString()
-    };
-  }
+  return JSON.parse(response.getContentText());
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// 📋 تسجيل الرسائل (Log) - للمراجعة والتتبع
-// ═══════════════════════════════════════════════════════════════════════════════
-function logMessage(message) {
-  try {
-    const sheetName = 'Webhook Log';
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    
-    // إنشاء شيت جديد إذا لم يكن موجوداً
-    let sheet = ss.getSheetByName(sheetName);
-    if (!sheet) {
-      sheet = ss.insertSheet(sheetName);
-      // عناوين الأعمدة
-      sheet.appendRow(['التاريخ والوقت', 'نوع الرسالة', 'الزوج', 'ملخص']);
-      sheet.getRange(1, 1, 1, 4).setFontWeight('bold');
-    }
-
-    // تحديد نوع الرسالة
-    let messageType = 'غير معروف';
-    if (message.includes('تم تحقيق') || message.includes('عاشت ايدك') || message.includes('جبنا')) {
-      messageType = 'تحقق هدف ✅';
-    } else if (message.includes('ضرب الوقف') || message.includes('معوضين')) {
-      messageType = 'ضرب وقف ❌';
-    } else if (message.includes('شراء') || message.includes('بيع')) {
-      messageType = 'إشارة دخول 🚀';
-    }
-
-    // استخراج الزوج
-    const pairMatch = message.match(/الزوج:\s*([^\s|]+)/);
-    const pair = pairMatch ? pairMatch[1].trim() : 'غير محدد';
-
-    // إضافة السجل
-    sheet.appendRow([
-      new Date().toLocaleString('ar-SA', { timeZone: 'Asia/Aden' }),
-      messageType,
-      pair,
-      message.substring(0, 200)
-    ]);
-
-    // الاحتفاظ بآخر 100 سجل فقط
-    const lastRow = sheet.getLastRow();
-    if (lastRow > 101) {
-      sheet.deleteRows(2, lastRow - 101);
-    }
-
-  } catch (logError) {
-    // لا نوقف العملية إذا فشل التسجيل
-    console.log('Log error: ' + logError.toString());
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🧪 دالة اختبار - أرسل إشارة تجريبية للتطبيق
+// 🧪🧪🧪 دوال التجربة - اختر الدالة وشغّلها من القائمة أعلى المحرر
 // ═══════════════════════════════════════════════════════════════════════════════
-function testWebhook() {
-  const testMessage = `ForexYemeni_Gold |
-🟢 إشارة شراء
-📊 الزوج: XAUUSD
-⏱️ الإطار الزمني: M15
-💰 سعر الدخول: 2340.50
-🛡️ نوع الوقف: ATR
-🛑 الوقف: 2335.20
-💰 حجم اللوت: 0.10 لوت قياسي
-📊 المخاطرة: $5.00 (5%)
-⭐⭐
-🎯 الهدف 1: 2342.00
-🎯 الهدف 2: 2344.50
-🎯 الهدف 3: 2347.00
-🎯 الهدف 4: 2350.00
-🎯 الهدف 5: 2353.00
-🎯 الهدف 6: 2356.00
-🎯 الهدف 7: 2360.00
-🎯 الهدف 8: 2365.00
-🎯 الهدف 9: 2370.00
-🎯 الهدف 10: 2375.00`;
 
-  const result = sendToApp(testMessage);
-  Logger.log('Test Result: ' + JSON.stringify(result));
+
+// ═══════════════════════════════════════════════════════════════════
+// 🧪 اختبار 1: إشارة شراء XAUUSD (ذهب) - 10 أهداف
+// ═══════════════════════════════════════════════════════════════════
+function test_BUY_Signal() {
+  var message = 'ForexYemeni_Gold |\n' +
+    '🟢 إشارة شراء\n' +
+    '📊 الزوج: XAUUSD\n' +
+    '⏱️ الإطار الزمني: M15\n' +
+    '💰 سعر الدخول: 2340.50\n' +
+    '🛡️ نوع الوقف: ATR\n' +
+    '🛑 الوقف: 2335.20\n' +
+    '💰 حجم اللوت: 0.10 لوت قياسي\n' +
+    '📊 المخاطرة: $5.00 (5%)\n' +
+    '⭐⭐⭐\n' +
+    '📈 الاتجاه متعدد الأطراف: BULLISH\n' +
+    '📐 بنية SMC: BULLISH\n' +
+    '🎯 الهدف 1: 2342.00\n' +
+    '🎯 الهدف 2: 2344.50\n' +
+    '🎯 الهدف 3: 2347.00\n' +
+    '🎯 الهدف 4: 2350.00\n' +
+    '🎯 الهدف 5: 2353.00\n' +
+    '🎯 الهدف 6: 2356.00\n' +
+    '🎯 الهدف 7: 2360.00\n' +
+    '🎯 الهدف 8: 2365.00\n' +
+    '🎯 الهدف 9: 2370.00\n' +
+    '🎯 الهدف 10: 2375.00';
+
+  var result = sendToApp(message);
+  Logger.log('🧪 نتيجة اختبار شراء: ' + JSON.stringify(result, null, 2));
   return result;
 }
 
+
+// ═══════════════════════════════════════════════════════════════════
+// 🧪 اختبار 2: إشارة بيع EURUSD (يورو دولار) - 10 أهداف
+// ═══════════════════════════════════════════════════════════════════
+function test_SELL_Signal() {
+  var message = 'ForexYemeni_Gold |\n' +
+    '🔴 إشارة بيع\n' +
+    '📊 الزوج: EURUSD\n' +
+    '⏱️ الإطار الزمني: H1\n' +
+    '💰 سعر الدخول: 1.0850\n' +
+    '🛡️ نوع الوقف: Swing\n' +
+    '🛑 الوقف: 1.0890\n' +
+    '💰 حجم اللوت: 0.05 لوت ميكرو\n' +
+    '📊 المخاطرة: $3.00 (3%)\n' +
+    '⭐⭐\n' +
+    '📉 الاتجاه متعدد الأطراف: BEARISH\n' +
+    '📐 بنية SMC: BEARISH\n' +
+    '🎯 الهدف 1: 1.0835\n' +
+    '🎯 الهدف 2: 1.0820\n' +
+    '🎯 الهدف 3: 1.0800\n' +
+    '🎯 الهدف 4: 1.0780\n' +
+    '🎯 الهدف 5: 1.0755\n' +
+    '🎯 الهدف 6: 1.0730\n' +
+    '🎯 الهدف 7: 1.0700\n' +
+    '🎯 الهدف 8: 1.0670\n' +
+    '🎯 الهدف 9: 1.0640\n' +
+    '🎯 الهدف 10: 1.0600';
+
+  var result = sendToApp(message);
+  Logger.log('🧪 نتيجة اختبار بيع: ' + JSON.stringify(result, null, 2));
+  return result;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// 🧪 اختبار 3: تحقق هدف واحد (الهدف 3 من XAUUSD)
+// ═══════════════════════════════════════════════════════════════════
+function test_TP_Hit_Single() {
+  var message = 'ForexYemeni_Gold |\n' +
+    '✅ تم تحقيق الهدف 3\n' +
+    '📊 الزوج: XAUUSD\n' +
+    '💰 السعر المحقق: 2347.00\n' +
+    '🎉 عاشت ايدك!';
+
+  var result = sendToApp(message);
+  Logger.log('🧪 نتيجة اختبار تحقق هدف واحد: ' + JSON.stringify(result, null, 2));
+  return result;
+}
+
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// 📊 عرض آخر السجلات
+// 🧪 اختبار 4: تحقق عدة أهداف (من الهدف 4 إلى 7)
+// ═══════════════════════════════════════════════════════════════════
+function test_TP_Hit_Multiple() {
+  var message = 'ForexYemeni_Gold |\n' +
+    '✅ جبنا الأهداف من 4 إلى 7\n' +
+    '📊 الزوج: XAUUSD\n' +
+    '💰 السعر: 2356.00\n' +
+    '🎉 عاشت ايدك! فول تيك بروفيت!';
+
+  var result = sendToApp(message);
+  Logger.log('🧪 نتيجة اختبار تحقق عدة أهداف: ' + JSON.stringify(result, null, 2));
+  return result;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+// 🧪 اختبار 5: ضرب وقف خسارة (SL) بدون أهداف محققة
+// ═══════════════════════════════════════════════════════════════════
+function test_SL_Hit_NoTP() {
+  var message = 'ForexYemeni_Gold |\n' +
+    '❌ ضرب الوقف\n' +
+    '📊 الزوج: EURUSD\n' +
+    '🛑 سعر الوقف: 1.0890\n' +
+    '📉 عدد الأهداف المحققة: 0\n' +
+    '😔 معوضين';
+
+  var result = sendToApp(message);
+  Logger.log('🧪 نتيجة اختبار ضرب وقف: ' + JSON.stringify(result, null, 2));
+  return result;
+}
+
+
 // ═══════════════════════════════════════════════════════════════════════════════
-function showLogs() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName('Webhook Log');
-  
-  if (!sheet) {
-    return 'لا توجد سجلات بعد';
-  }
+// 🧪 اختبار 6: ضرب وقف خسارة بعد تحقيق هدفين
+// ═══════════════════════════════════════════════════════════════════════════════
+function test_SL_Hit_WithTP() {
+  var message = 'ForexYemeni_Gold |\n' +
+    '❌ ضرب الوقف\n' +
+    '📊 الزوج: XAUUSD\n' +
+    '🛑 سعر الوقف: 2335.20\n' +
+    '📉 عدد الأهداف المحققة: 3\n' +
+    '😔 معوضين';
 
-  const data = sheet.getDataRange().getValues();
-  const headers = data[0];
-  const rows = data.slice(-10); // آخر 10 سجلات
+  var result = sendToApp(message);
+  Logger.log('🧪 نتيجة اختبار ضرب وقف مع أهداف: ' + JSON.stringify(result, null, 2));
+  return result;
+}
 
-  let output = '📋 آخر 10 سجلات:\n\n';
-  output += headers.join(' | ') + '\n';
-  output += '-'.repeat(80) + '\n';
-  
-  rows.forEach(row => {
-    output += row.join(' | ') + '\n';
-  });
 
-  Logger.log(output);
-  return output;
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🧪 اختبار 7: تجربة كاملة - إشارة + أهداف + ضرب وقف
+// ═══════════════════════════════════════════════════════════════════════════════
+function test_FullScenario() {
+  Logger.log('═══════════════════════════════════════');
+  Logger.log('🧪 بداية التجربة الكاملة');
+  Logger.log('═══════════════════════════════════════');
+
+  // الخطوة 1: إشارة شراء
+  Logger.log('\n📌 الخطوة 1: إرسال إشارة شراء GBPUSD...');
+  var step1 = 'ForexYemeni_Gold |\n' +
+    '🟢 إشارة شراء\n' +
+    '📊 الزوج: GBPUSD\n' +
+    '⏱️ الإطار الزمني: H4\n' +
+    '💰 سعر الدخول: 1.2720\n' +
+    '🛡️ نوع الوقف: FVG\n' +
+    '🛑 الوقف: 1.2680\n' +
+    '💰 حجم اللوت: 0.03 لوت ميكرو\n' +
+    '📊 المخاطرة: $2.00 (2%)\n' +
+    '⭐\n' +
+    '🎯 الهدف 1: 1.2750\n' +
+    '🎯 الهدف 2: 1.2780\n' +
+    '🎯 الهدف 3: 1.2820\n' +
+    '🎯 الهدف 4: 1.2860\n' +
+    '🎯 الهدف 5: 1.2900\n' +
+    '🎯 الهدف 6: 1.2940\n' +
+    '🎯 الهدف 7: 1.2980\n' +
+    '🎯 الهدف 8: 1.3020\n' +
+    '🎯 الهدف 9: 1.3060\n' +
+    '🎯 الهدف 10: 1.3100';
+
+  var result1 = sendToApp(step1);
+  Logger.log('✅ النتيجة: ' + JSON.stringify(result1));
+
+  // انتظار ثانيتين
+  Utilities.sleep(2000);
+
+  // الخطوة 2: تحقق هدف 1 و 2
+  Logger.log('\n📌 الخطوة 2: تحقق الهدف 1 و 2...');
+  var step2 = 'ForexYemeni_Gold |\n' +
+    '✅ جبنا الأهداف من 1 إلى 2\n' +
+    '📊 الزوج: GBPUSD\n' +
+    '🎉 عاشت ايدك!';
+
+  var result2 = sendToApp(step2);
+  Logger.log('✅ النتيجة: ' + JSON.stringify(result2));
+
+  Utilities.sleep(2000);
+
+  // الخطوة 3: تحقق هدف 3
+  Logger.log('\n📌 الخطوة 3: تحقق الهدف 3...');
+  var step3 = 'ForexYemeni_Gold |\n' +
+    '✅ تم تحقيق الهدف 3\n' +
+    '📊 الزوج: GBPUSD\n' +
+    '💰 السعر: 1.2820\n' +
+    '🎉 عاشت ايدك!';
+
+  var result3 = sendToApp(step3);
+  Logger.log('✅ النتيجة: ' + JSON.stringify(result3));
+
+  Utilities.sleep(2000);
+
+  // الخطوة 4: ضرب وقف
+  Logger.log('\n📌 الخطوة 4: ضرب وقف الخسارة...');
+  var step4 = 'ForexYemeni_Gold |\n' +
+    '❌ ضرب الوقف\n' +
+    '📊 الزوج: GBPUSD\n' +
+    '🛑 سعر الوقف: 1.2680\n' +
+    '📉 عدد الأهداف المحققة: 3\n' +
+    '😔 معوضين';
+
+  var result4 = sendToApp(step4);
+  Logger.log('✅ النتيجة: ' + JSON.stringify(result4));
+
+  Logger.log('\n═══════════════════════════════════════');
+  Logger.log('🧪 انتهت التجربة الكاملة!');
+  Logger.log('═══════════════════════════════════════');
+
+  return {
+    step1_buy: result1,
+    step2_tp_hit: result2,
+    step3_tp_hit: result3,
+    step4_sl_hit: result4
+  };
 }
