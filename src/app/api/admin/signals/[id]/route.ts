@@ -60,7 +60,31 @@ export async function PUT(
 
     const updateData: Record<string, unknown> = {};
     if (status) updateData.status = status;
-    if (currentTP !== undefined) updateData.currentTP = currentTP;
+
+    // التحقق من الترتيب: الأهداف يجب أن تتحقق بالتسلسل
+    if (currentTP !== undefined) {
+      if (currentTP < 0) {
+        return NextResponse.json({ error: 'لا يمكن تقليل الأهداف المحققة' }, { status: 400 });
+      }
+      if (currentTP > signal.currentTP + 1) {
+        return NextResponse.json(
+          { error: `يجب تحقيق الأهداف بالترتيب. الهدف الحالي هو ${signal.currentTP}، لا يمكنك القفز إلى الهدف ${currentTP}` },
+          { status: 400 }
+        );
+      }
+      if (currentTP > signal.totalTargets) {
+        return NextResponse.json({ error: 'عدد الأهداف يتجاوز الحد الأقصى' }, { status: 400 });
+      }
+      updateData.currentTP = currentTP;
+
+      // إذا تم تحقيق جميع الأهداف، حدّث الحالة تلقائياً
+      if (currentTP >= signal.totalTargets) {
+        updateData.status = 'HIT_TP';
+      } else {
+        updateData.status = 'ACTIVE';
+      }
+    }
+
     if (status === 'HIT_TP' || status === 'HIT_SL') {
       updateData.currentTP = signal.totalTargets;
     }

@@ -420,11 +420,12 @@ export default function ForexApp() {
   const handleUpdateSignal = async (signalId: string, update: { status?: string; currentTP?: number }) => {
     if (!token) return;
     try {
-      await API.put(`/api/admin/signals/${signalId}`, update, token);
+      const res = await API.put(`/api/admin/signals/${signalId}`, update, token);
       fetchAdminSignals();
-      toast({ title: 'نجاح', description: 'تم تحديث الإشارة' });
-    } catch {
-      toast({ title: 'خطأ', description: 'فشل تحديث الإشارة' });
+      toast({ title: 'نجاح', description: update.currentTP ? `تم تحقيق الهدف ${update.currentTP}` : 'تم تحديث الإشارة' });
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || 'فشل تحديث الإشارة';
+      toast({ title: 'خطأ', description: msg, variant: 'destructive' });
     }
   };
 
