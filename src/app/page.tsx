@@ -465,19 +465,34 @@ export default function ForexApp() {
       return;
     }
     try {
-      const data = await API.post('/api/auth/login', { email: loginEmail, password: loginPassword });
-      if (data.token) {
-        await fetchUser(data.token);
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.token) {
+        setToken(data.token);
+        localStorage.setItem('fx_token', data.token);
+        setUser(data.user);
+        setUserSettings({
+          lotSize: data.user.lotSize?.toString() || '',
+          accBalance: data.user.accBalance?.toString() || '100',
+          riskPct: data.user.riskPct?.toString() || '5',
+        });
+        setView(data.user.role === 'ADMIN' ? 'admin-dashboard' : 'user-dashboard');
         toast({ title: 'نجاح', description: 'تم تسجيل الدخول بنجاح' });
+      } else if (data.code === 'PENDING') {
+        toast({ title: 'تنبيه', description: 'الحساب بانتظار التفعيل - أدخل كود OTP' });
+        setOtpEmail(loginEmail);
+        setView('otp');
       } else {
-        toast({ title: 'خطأ', description: data.error });
-        if (data.code === 'PENDING') {
-          setOtpEmail(loginEmail);
-          setView('otp');
-        }
+        toast({ title: 'خطأ', description: data.error || 'بيانات الدخول غير صحيحة' });
       }
-    } catch {
-      toast({ title: 'خطأ', description: 'فشل تسجيل الدخول' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'فشل تسجيل الدخول - تحقق من اتصال الإنترنت';
+      toast({ title: 'خطأ في تسجيل الدخول', description: msg });
     }
   };
 
@@ -503,10 +518,11 @@ export default function ForexApp() {
         setView('otp');
         toast({ title: 'نجاح', description: `كود التفعيل: ${data.otp}` });
       } else {
-        toast({ title: 'خطأ', description: data.error });
+        toast({ title: 'خطأ', description: data.error || 'فشل التسجيل' });
       }
-    } catch {
-      toast({ title: 'خطأ', description: 'فشل التسجيل' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'فشل التسجيل - تحقق من اتصال الإنترنت';
+      toast({ title: 'خطأ في التسجيل', description: msg });
     }
   };
 
@@ -518,13 +534,22 @@ export default function ForexApp() {
     try {
       const data = await API.post('/api/auth/verify-otp', { email: otpEmail, otp: otpValue });
       if (data.token) {
-        await fetchUser(data.token);
+        setToken(data.token);
+        localStorage.setItem('fx_token', data.token);
+        setUser(data.user);
+        setUserSettings({
+          lotSize: data.user.lotSize?.toString() || '',
+          accBalance: data.user.accBalance?.toString() || '100',
+          riskPct: data.user.riskPct?.toString() || '5',
+        });
+        setView(data.user.role === 'ADMIN' ? 'admin-dashboard' : 'user-dashboard');
         toast({ title: 'نجاح', description: 'تم تفعيل الحساب بنجاح' });
       } else {
-        toast({ title: 'خطأ', description: data.error });
+        toast({ title: 'خطأ', description: data.error || 'كود التفعيل غير صحيح' });
       }
-    } catch {
-      toast({ title: 'خطأ', description: 'فشل التحقق' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'فشل التحقق - تحقق من اتصال الإنترنت';
+      toast({ title: 'خطأ في التحقق', description: msg });
     }
   };
 
@@ -537,10 +562,11 @@ export default function ForexApp() {
         setOtpValue('');
         toast({ title: 'نجاح', description: `كود التفعيل الجديد: ${data.otp}` });
       } else {
-        toast({ title: 'خطأ', description: data.error });
+        toast({ title: 'خطأ', description: data.error || 'فشل إعادة الإرسال' });
       }
-    } catch {
-      toast({ title: 'خطأ', description: 'فشل إعادة الإرسال' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'فشل إعادة الإرسال - تحقق من اتصال الإنترنت';
+      toast({ title: 'خطأ', description: msg });
     }
   };
 
