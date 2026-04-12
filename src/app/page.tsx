@@ -381,7 +381,33 @@ export default function ForexApp() {
   useEffect(() => {
     const savedToken = localStorage.getItem('fx_token');
     if (savedToken) {
-      fetchUser(savedToken);
+      // Verify token is still valid
+      fetch('/api/auth/me', {
+        headers: { 'authorization': `Bearer ${savedToken}` },
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.user) {
+            setToken(savedToken);
+            setUser(data.user);
+            setUserSettings({
+              lotSize: data.user.lotSize?.toString() || '',
+              accBalance: data.user.accBalance?.toString() || '100',
+              riskPct: data.user.riskPct?.toString() || '5',
+            });
+            if (data.user.role === 'ADMIN') {
+              setView('admin-dashboard');
+            } else {
+              setView('user-dashboard');
+            }
+          } else {
+            localStorage.removeItem('fx_token');
+          }
+        })
+        .catch(() => {
+          localStorage.removeItem('fx_token');
+        })
+        .finally(() => setLoading(false));
     } else {
       setTimeout(() => setLoading(false), 800);
     }
