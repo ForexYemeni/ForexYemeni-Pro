@@ -58,3 +58,5 @@ server.log
 db/*.db
 worklog.md
 
+*.zip
+download/
