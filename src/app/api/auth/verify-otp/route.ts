@@ -48,6 +48,11 @@ export async function POST(req: NextRequest) {
         role: user.role,
         status: 'ACTIVE',
         plan: user.plan,
+        trialEndsAt: user.trialEndsAt,
+        lotSize: user.lotSize,
+        accBalance: user.accBalance,
+        riskPct: user.riskPct,
+        createdAt: user.createdAt,
       },
     });
   } catch (error) {

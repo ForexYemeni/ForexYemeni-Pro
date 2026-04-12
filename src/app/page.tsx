@@ -343,6 +343,7 @@ export default function ForexApp() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
   const [regName, setRegName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
@@ -464,6 +465,7 @@ export default function ForexApp() {
       toast({ title: 'خطأ', description: 'جميع الحقول مطلوبة' });
       return;
     }
+    setLoginLoading(true);
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
@@ -491,8 +493,11 @@ export default function ForexApp() {
         toast({ title: 'خطأ', description: data.error || 'بيانات الدخول غير صحيحة' });
       }
     } catch (err: unknown) {
+      console.error('Login error:', err);
       const msg = err instanceof Error ? err.message : 'فشل تسجيل الدخول - تحقق من اتصال الإنترنت';
       toast({ title: 'خطأ في تسجيل الدخول', description: msg });
+    } finally {
+      setLoginLoading(false);
     }
   };
 
@@ -1443,14 +1448,20 @@ export default function ForexApp() {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  className="w-full py-3 rounded-xl font-bold text-sm transition-all"
+                  className="w-full py-3 rounded-xl font-bold text-sm transition-all disabled:opacity-60"
                   style={{
                     background: 'linear-gradient(135deg, #FFB800, #FF8C00)',
                     color: DS.bgPrimary,
                   }}
                   onClick={handleLogin}
+                  disabled={loginLoading}
                 >
-                  تسجيل الدخول
+                  {loginLoading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <RefreshCw size={16} className="animate-spin" />
+                      جاري تسجيل الدخول...
+                    </span>
+                  ) : 'تسجيل الدخول'}
                 </motion.button>
               </div>
 
